@@ -206,15 +206,21 @@ export default function App() {
     try {
       if (window.firebase) {
         if (!window.firebase.apps.length) {
-          window.firebase.initializeApp(firebaseConfig);
+          if (firebaseConfig.apiKey) {
+            window.firebase.initializeApp(firebaseConfig);
+          } else {
+            console.warn('Firebase: VITE_FIREBASE_API_KEY no detectada. Configura las variables de entorno para habilitar Firestore y Realtime Database.');
+          }
         }
-        fbFirestore = window.firebase.firestore();
-        try {
-          fbDb = window.firebase.database();
-        } catch (dbErr) {
-          console.warn('Realtime Database no disponible o URL no configurada:', dbErr);
+        if (window.firebase.apps.length) {
+          fbFirestore = window.firebase.firestore();
+          try {
+            fbDb = window.firebase.database();
+          } catch (dbErr) {
+            console.warn('Realtime Database no disponible o URL no configurada:', dbErr);
+          }
+          setupFirebaseSync();
         }
-        setupFirebaseSync();
       }
     } catch (err) {
       console.warn('Firebase init error:', err);
