@@ -42,6 +42,15 @@ export interface ActiveClue extends Clue {
   catId: string;
 }
 
+export interface SavedProgram {
+  id: string;
+  name: string;
+  createdAt: number;
+  dateStr?: string;
+  categories: Category[];
+  totalQuestions?: number;
+}
+
 export interface JeopardyState {
   roomCode: string;
   status: 'setup' | 'qrcodes' | 'game' | 'podium_teams';
@@ -64,6 +73,7 @@ declare global {
     QRCode: any;
     confetti: any;
     firebase: any;
+    XLSX: any;
     webkitAudioContext: typeof AudioContext;
   }
 }

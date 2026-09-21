@@ -3,7 +3,7 @@
  * Exact fidelity implementation matching the provided architecture and UI.
  */
 import { useEffect, useRef } from 'react';
-import type { Category, Team } from './types';
+import type { Category, Team, SavedProgram } from './types';
 import { firebaseConfig } from './firebaseConfig';
 
 export default function App() {
@@ -203,6 +203,17 @@ export default function App() {
     let serverTimeOffset = 0;
     let isTeacherAuthenticated = localStorage.getItem('auth_token_jeopardy') !== null;
 
+    const SAVED_PROGRAMS_KEY = 'jeopardy_saved_programs';
+    function loadSavedProgramsLocal(): SavedProgram[] {
+      try {
+        const raw = localStorage.getItem(SAVED_PROGRAMS_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (e) {}
+      return [];
+    }
+
+    let savedPrograms: SavedProgram[] = loadSavedProgramsLocal();
+
     try {
       if (window.firebase) {
         if (!window.firebase.apps.length) {
@@ -220,6 +231,7 @@ export default function App() {
             console.warn('Realtime Database no disponible o URL no configurada:', dbErr);
           }
           setupFirebaseSync();
+          setupProgramsListener();
         }
       }
     } catch (err) {
@@ -298,6 +310,73 @@ export default function App() {
 
         render();
       });
+    }
+
+    function mergePrograms(newList: SavedProgram[]) {
+      const map = new Map<string, SavedProgram>();
+      savedPrograms.forEach(p => map.set(p.id, p));
+      newList.forEach(p => {
+        if (p && p.id) {
+          map.set(p.id, p);
+        }
+      });
+      savedPrograms = Array.from(map.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      try {
+        localStorage.setItem(SAVED_PROGRAMS_KEY, JSON.stringify(savedPrograms));
+      } catch (e) {}
+      updateProgramsDropdownDOM();
+    }
+
+    function setupProgramsListener() {
+      updateProgramsDropdownDOM();
+
+      if (fbDb) {
+        fbDb.ref('jeopardy_programas').on('value', (snap: any) => {
+          const val = snap.val();
+          if (val) {
+            const list: SavedProgram[] = Object.keys(val).map(key => ({
+              ...val[key],
+              id: key
+            }));
+            mergePrograms(list);
+          }
+        });
+      }
+
+      if (fbFirestore) {
+        try {
+          fbFirestore.collection('jeopardy_programas').onSnapshot((snapshot: any) => {
+            const list: SavedProgram[] = [];
+            snapshot.forEach((doc: any) => {
+              list.push({ ...doc.data(), id: doc.id });
+            });
+            if (list.length > 0) {
+              mergePrograms(list);
+            }
+          }, (err: any) => {
+            console.warn('Firestore snapshot warning:', err);
+          });
+        } catch (err) {
+          console.warn('Firestore listener setup warning:', err);
+        }
+      }
+    }
+
+    function updateProgramsDropdownDOM() {
+      const selectEl = document.getElementById('select-saved-program') as HTMLSelectElement;
+      if (!selectEl) return;
+
+      const curVal = selectEl.value;
+      let html = `<option value="">-- Seleccionar programa guardado (${savedPrograms.length}) --</option>`;
+      savedPrograms.forEach(p => {
+        const qCount = p.totalQuestions || (p.categories ? p.categories.reduce((acc, c) => acc + (c.clues ? c.clues.length : 0), 0) : 0);
+        const dateDisplay = p.dateStr || (p.createdAt ? new Date(p.createdAt).toLocaleDateString('es-ES') : '');
+        html += `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${p.categories?.length || 0} cat. / ${qCount} preg.) ${dateDisplay ? '· ' + dateDisplay : ''}</option>`;
+      });
+      selectEl.innerHTML = html;
+      if (curVal && savedPrograms.some(p => p.id === curVal)) {
+        selectEl.value = curVal;
+      }
     }
 
     function updateLiveParticipantsDOM() {
@@ -570,89 +649,297 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
       URL.revokeObjectURL(url);
     }
 
-    function handleCSVUpload(file: File) {
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(e: any) {
-        try {
-          const text = e.target.result;
-          const lines = text.split(/\r\n|\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-          if (lines.length < 2) {
-            alert('El archivo CSV está vacío o no contiene suficientes filas.');
-            return;
-          }
-          const headerLine = lines[0];
-          let delimiter = ',';
-          if (headerLine.includes(';') && !headerLine.includes(',')) delimiter = ';';
-          else if (headerLine.includes('\t')) delimiter = '\t';
-
-          const categoriesMap = new Map<string, any[]>();
-
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i];
-            const parts: string[] = [];
-            let inQuote = false;
-            let cur = '';
-            for (let j = 0; j < line.length; j++) {
-              const ch = line[j];
-              if (ch === '"') {
-                inQuote = !inQuote;
-              } else if (ch === delimiter && !inQuote) {
-                parts.push(cur.trim());
-                cur = '';
-              } else {
-                cur += ch;
-              }
-            }
-            parts.push(cur.trim());
-
-            if (parts.length >= 3) {
-              const catTitle = parts[0].replace(/^["']|["']$/g, '').trim();
-              const valNum = parseInt(parts[1].replace(/[^0-9]/g, ''), 10) || 100;
-              const question = parts[2].replace(/^["']|["']$/g, '').trim();
-              const answer = (parts[3] || '').replace(/^["']|["']$/g, '').trim();
-
-              if (!catTitle || !question) continue;
-
-              if (!categoriesMap.has(catTitle)) {
-                categoriesMap.set(catTitle, []);
-              }
-              const cluesArr = categoriesMap.get(catTitle)!;
-              cluesArr.push({
-                id: `c_${categoriesMap.size}_${cluesArr.length + 1}_${Date.now()}`,
-                value: valNum,
-                question: question,
-                answer: answer || 'Respuesta no especificada',
-                isAnswered: false
-              });
-            }
-          }
-
-          if (categoriesMap.size === 0) {
-            alert('No se encontraron preguntas válidas en el archivo CSV.');
-            return;
-          }
-
-          const newCategories: Category[] = [];
-          let catIndex = 1;
-          categoriesMap.forEach((clues, title) => {
-            newCategories.push({
-              id: `cat-${catIndex++}-${Date.now()}`,
-              title: title,
-              clues: clues.slice(0, 5)
-            });
-          });
-
-          state.categories = newCategories;
-          persistState(state);
-          sound.playCorrect();
-          alert(`¡Se han cargado con éxito ${newCategories.length} categorías de preguntas!`);
-        } catch (err: any) {
-          console.error('Error al procesar CSV:', err);
-          alert('Error al leer el archivo CSV: ' + err.message);
+    function downloadExcelSample() {
+      try {
+        if (window.XLSX) {
+          const sampleRows = [
+            ['Categoría', 'Puntos', 'Pregunta', 'Respuesta'],
+            ['Historia', 100, 'Año de la llegada de Cristóbal Colón al continente americano.', '1492'],
+            ['Historia', 200, 'Civilización precolombina constructora de la ciudadela de Machu Picchu.', 'Los Incas'],
+            ['Historia', 300, 'Primer emperador de Roma tras la caída de la República.', 'César Augusto'],
+            ['Historia', 400, 'Tratado firmado en 1919 que selló el final de la Primera Guerra Mundial.', 'Tratado de Versalles'],
+            ['Historia', 500, 'Pensador de la Ilustración autor de la división de poderes.', 'Montesquieu'],
+            ['Ciencia', 100, 'Elemento químico más ligero y abundante del universo.', 'Hidrógeno'],
+            ['Ciencia', 200, 'Fuerza que atrae los cuerpos hacia el centro de la Tierra.', 'Gravedad'],
+            ['Ciencia', 300, 'Orgánulo celular responsable de la respiración celular.', 'Mitocondria'],
+            ['Ciencia', 400, 'Velocidad estimada de la luz en el vacío en km/s.', '300.000 km/s'],
+            ['Ciencia', 500, 'Partícula de carga neutra en el núcleo atómico.', 'Neutrón'],
+            ['Geografía', 100, 'Río con mayor caudal y longitud del planeta Tierra.', 'Río Amazonas'],
+            ['Geografía', 200, 'País soberano con mayor superficie territorial del planeta.', 'Rusia'],
+            ['Geografía', 300, 'Cordillera continental más larga del mundo en Sudamérica.', 'Cordillera de los Andes'],
+            ['Geografía', 400, 'Ciudad capital de Australia.', 'Canberra'],
+            ['Geografía', 500, 'Desierto no polar más árido del mundo en el norte de Chile.', 'Desierto de Atacama'],
+            ['Cultura Pop', 100, 'Identidad secreta del superhéroe protector de Gotham conocido como Batman.', 'Bruce Wayne'],
+            ['Cultura Pop', 200, 'Banda británica icónica integrada por John Paul George y Ringo.', 'The Beatles'],
+            ['Cultura Pop', 300, 'Superproducción de James Cameron ambientada en Pandora.', 'Avatar'],
+            ['Cultura Pop', 400, 'Criatura eléctrica y mascota de Pokémon.', 'Pikachu'],
+            ['Cultura Pop', 500, 'Autor británico de El Señor de los Anillos.', 'J.R.R. Tolkien'],
+            ['Deportes', 100, 'País con mayor cantidad de títulos en Copas Mundiales FIFA.', 'Brasil (5 títulos)'],
+            ['Deportes', 200, 'Puntaje máximo en una partida de boliche (bowling).', '300 puntos'],
+            ['Deportes', 300, 'Atleta jamaiquino plusmarquista de los 100 y 200 metros planos.', 'Usain Bolt'],
+            ['Deportes', 400, 'Grand Slam disputado sobre césped en Reino Unido.', 'Wimbledon'],
+            ['Deportes', 500, 'Número reglamentario de jugadores por equipo en cancha en básquetbol.', '5 jugadores']
+          ];
+          const ws = window.XLSX.utils.aoa_to_sheet(sampleRows);
+          const wb = window.XLSX.utils.book_new();
+          window.XLSX.utils.book_append_sheet(wb, ws, 'Preguntas');
+          window.XLSX.writeFile(wb, 'plantilla_preguntas_jeopardy.xlsx');
+          return;
         }
+      } catch (err) {
+        console.warn('Error generando Excel con SheetJS:', err);
+      }
+      downloadCSVSample();
+    }
+
+    async function saveProgramToFirebase(name: string, categories: Category[]): Promise<string> {
+      const progId = `prog_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const now = Date.now();
+      const dateStr = new Date(now).toLocaleString('es-ES', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+      const totalQuestions = categories.reduce((acc, c) => acc + (c.clues ? c.clues.length : 0), 0);
+
+      const cleanCategories = categories.map(c => ({
+        id: c.id,
+        title: c.title,
+        clues: (c.clues || []).map(cl => ({
+          id: cl.id,
+          value: cl.value,
+          question: cl.question,
+          answer: cl.answer,
+          isAnswered: false
+        }))
+      }));
+
+      const newProgram: SavedProgram = {
+        id: progId,
+        name: name.trim() || 'Programa Jeopardy',
+        createdAt: now,
+        dateStr: dateStr,
+        categories: cleanCategories,
+        totalQuestions: totalQuestions
       };
-      reader.readAsText(file, 'UTF-8');
+
+      mergePrograms([newProgram]);
+
+      if (fbDb) {
+        try {
+          await fbDb.ref(`jeopardy_programas/${progId}`).set(newProgram);
+        } catch (dbErr) {
+          console.warn('Realtime Database save warning:', dbErr);
+        }
+      }
+
+      if (fbFirestore) {
+        try {
+          await fbFirestore.collection('jeopardy_programas').doc(progId).set(newProgram);
+        } catch (fsErr) {
+          console.warn('Firestore save warning:', fsErr);
+        }
+      }
+
+      return progId;
+    }
+
+    async function deleteProgram(programId: string) {
+      const prog = savedPrograms.find(p => p.id === programId);
+      if (!prog) return;
+      if (!confirm(`¿Deseas eliminar el programa "${prog.name}" de la lista guardada?`)) return;
+
+      savedPrograms = savedPrograms.filter(p => p.id !== programId);
+      try {
+        localStorage.setItem(SAVED_PROGRAMS_KEY, JSON.stringify(savedPrograms));
+      } catch (e) {}
+      updateProgramsDropdownDOM();
+
+      if (fbDb) {
+        try {
+          await fbDb.ref(`jeopardy_programas/${programId}`).remove();
+        } catch (e) {}
+      }
+      if (fbFirestore) {
+        try {
+          await fbFirestore.collection('jeopardy_programas').doc(programId).delete();
+        } catch (e) {}
+      }
+      sound.playWrong();
+    }
+
+    function processParsedRows(rows: any[][], programName: string) {
+      if (!rows || rows.length < 2) {
+        alert('El archivo está vacío o no contiene suficientes filas.');
+        return;
+      }
+
+      let headerIndex = 0;
+      let catCol = 0, valCol = 1, qCol = 2, aCol = 3;
+
+      for (let r = 0; r < Math.min(rows.length, 6); r++) {
+        const row = rows[r].map(c => String(c || '').toLowerCase().trim());
+        const cIdx = row.findIndex(c => c.includes('categ') || c.includes('tema'));
+        const vIdx = row.findIndex(c => c.includes('punt') || c.includes('valor') || c.includes('score') || c.includes('point'));
+        const qIdx = row.findIndex(c => c.includes('preg') || c.includes('clue') || c.includes('quest'));
+        const aIdx = row.findIndex(c => c.includes('resp') || c.includes('ans'));
+
+        if (cIdx !== -1 && (qIdx !== -1 || vIdx !== -1)) {
+          headerIndex = r;
+          catCol = cIdx;
+          if (vIdx !== -1) valCol = vIdx;
+          if (qIdx !== -1) qCol = qIdx;
+          if (aIdx !== -1) aCol = aIdx;
+          break;
+        }
+      }
+
+      const categoriesMap = new Map<string, any[]>();
+
+      for (let i = headerIndex + 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+
+        const catTitle = String(row[catCol] || '').replace(/^["']|["']$/g, '').trim();
+        const rawVal = String(row[valCol] || '');
+        const valNum = parseInt(rawVal.replace(/[^0-9]/g, ''), 10) || 100;
+        const question = String(row[qCol] || '').replace(/^["']|["']$/g, '').trim();
+        const answer = String(row[aCol] || '').replace(/^["']|["']$/g, '').trim();
+
+        if (!catTitle || !question) continue;
+
+        if (!categoriesMap.has(catTitle)) {
+          categoriesMap.set(catTitle, []);
+        }
+        const cluesArr = categoriesMap.get(catTitle)!;
+        cluesArr.push({
+          id: `c_${categoriesMap.size}_${cluesArr.length + 1}_${Date.now()}`,
+          value: valNum,
+          question: question,
+          answer: answer || 'Respuesta no especificada',
+          isAnswered: false
+        });
+      }
+
+      if (categoriesMap.size === 0) {
+        alert('No se encontraron preguntas válidas en el archivo subido.');
+        return;
+      }
+
+      const newCategories: Category[] = [];
+      let catIndex = 1;
+      categoriesMap.forEach((clues, title) => {
+        newCategories.push({
+          id: `cat-${catIndex++}-${Date.now()}`,
+          title: title,
+          clues: clues.slice(0, 5)
+        });
+      });
+
+      state.categories = newCategories;
+      state.title = programName;
+      persistState(state);
+      sound.playCorrect();
+
+      saveProgramToFirebase(programName, newCategories)
+        .then(() => {
+          alert(`¡Programa "${programName}" procesado y guardado en Firebase con éxito!\n(${newCategories.length} categorías y ${newCategories.reduce((acc, c) => acc + c.clues.length, 0)} preguntas cargadas)`);
+        })
+        .catch(err => {
+          console.warn('Error al guardar en Firebase:', err);
+          alert(`¡Preguntas cargadas a la partida!\n(Guardado localmente. Advertencia Firebase: ${err.message || err})`);
+        });
+    }
+
+    function parseCSVTextManually(text: string, programName: string) {
+      const lines = text.split(/\r\n|\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+      if (lines.length < 2) {
+        alert('El archivo CSV está vacío o no contiene suficientes filas.');
+        return;
+      }
+      const headerLine = lines[0];
+      let delimiter = ',';
+      if (headerLine.includes(';') && !headerLine.includes(',')) delimiter = ';';
+      else if (headerLine.includes('\t')) delimiter = '\t';
+
+      const rows: any[][] = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const parts: string[] = [];
+        let inQuote = false;
+        let cur = '';
+        for (let j = 0; j < line.length; j++) {
+          const ch = line[j];
+          if (ch === '"') {
+            inQuote = !inQuote;
+          } else if (ch === delimiter && !inQuote) {
+            parts.push(cur.trim());
+            cur = '';
+          } else {
+            cur += ch;
+          }
+        }
+        parts.push(cur.trim());
+        rows.push(parts);
+      }
+
+      processParsedRows(rows, programName);
+    }
+
+    function handleFileUpload(file: File) {
+      if (!file) return;
+
+      const progNameInput = document.getElementById('input-program-name') as HTMLInputElement;
+      let enteredProgramName = progNameInput?.value.trim();
+      if (!enteredProgramName) {
+        enteredProgramName = file.name.replace(/\.[^/.]+$/, '').trim() || 'Programa Jeopardy';
+        if (progNameInput) progNameInput.value = enteredProgramName;
+      }
+
+      const fileName = file.name.toLowerCase();
+      const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+
+      if (isExcel && window.XLSX) {
+        const reader = new FileReader();
+        reader.onload = function(e: any) {
+          try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = window.XLSX.read(data, { type: 'array' });
+            if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+              alert('El archivo Excel no contiene hojas de cálculo.');
+              return;
+            }
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const rows: any[][] = window.XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+            processParsedRows(rows, enteredProgramName);
+          } catch (err: any) {
+            console.error('Error al procesar archivo Excel:', err);
+            alert('Error al leer el archivo Excel: ' + (err.message || err));
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = function(e: any) {
+          try {
+            if (window.XLSX && (fileName.endsWith('.xlsx') || fileName.endsWith('.xls'))) {
+              const workbook = window.XLSX.read(e.target.result, { type: 'binary' });
+              const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+              const rows: any[][] = window.XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+              processParsedRows(rows, enteredProgramName);
+            } else {
+              parseCSVTextManually(e.target.result, enteredProgramName);
+            }
+          } catch (err: any) {
+            console.error('Error al procesar archivo:', err);
+            alert('Error al leer el archivo: ' + (err.message || err));
+          }
+        };
+        if (isExcel) {
+          reader.readAsBinaryString(file);
+        } else {
+          reader.readAsText(file, 'UTF-8');
+        }
+      }
     }
 
     function render() {
@@ -979,19 +1266,62 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
               </div>
             </div>
 
-            <div class="bg-[#000842] border-2 border-blue-900 rounded-2xl p-4">
-              <div class="flex justify-between items-center mb-2">
-                <label class="block font-black text-xs uppercase text-[#FFCC00] font-cinzel">3. Banco de Preguntas y Respuestas (CSV / Excel)</label>
-                <button id="btn-download-sample" class="text-xs font-bold text-[#FFCC00] hover:underline flex items-center gap-1 cursor-pointer">
-                  📥 Descargar plantilla CSV de muestra
-                </button>
+            <div class="bg-[#000842] border-2 border-blue-900 rounded-2xl p-4 space-y-4">
+              <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-blue-900/60">
+                <div>
+                  <label class="block font-black text-xs uppercase text-[#FFCC00] font-cinzel">3. Banco de Preguntas y Gestión de Programas (Excel / CSV)</label>
+                  <p class="text-[11px] text-blue-200 mt-0.5">Sube tus archivos de Excel (.xlsx, .xls) o CSV y guárdalos en Firebase para usarlos cuando quieras.</p>
+                </div>
+                <div class="flex items-center gap-2 self-end sm:self-auto">
+                  <button id="btn-download-excel" class="px-2.5 py-1.5 bg-emerald-700/80 hover:bg-emerald-600 border border-emerald-400 rounded-lg text-xs font-bold text-white flex items-center gap-1 cursor-pointer transition">
+                    📊 Plantilla Excel (.xlsx)
+                  </button>
+                  <button id="btn-download-sample" class="px-2.5 py-1.5 bg-blue-900 hover:bg-blue-800 border border-blue-600 rounded-lg text-xs font-bold text-blue-200 flex items-center gap-1 cursor-pointer transition">
+                    📄 Plantilla CSV
+                  </button>
+                </div>
               </div>
-              <div class="flex flex-col sm:flex-row items-center gap-3">
-                <input id="csv-file-input" type="file" accept=".csv,text/csv" class="hidden" />
-                <button id="btn-trigger-upload" class="w-full sm:w-auto px-5 py-3 bg-blue-900 hover:bg-blue-800 border-2 border-blue-500 rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-2 cursor-pointer">
-                  📁 Subir archivo CSV con preguntas
-                </button>
-                <span class="text-xs text-blue-300 font-medium">Categorías actuales: <strong>${state.categories.length}</strong></span>
+
+              <!-- Carga de nuevo archivo y Nombre del Programa -->
+              <div class="bg-[#000428] border border-blue-800/80 rounded-xl p-3 space-y-3">
+                <span class="text-xs font-bold uppercase text-blue-300 block tracking-wider font-cinzel">A. Cargar Nuevo Archivo y Guardar Programa</span>
+                
+                <div>
+                  <label for="input-program-name" class="block text-xs font-semibold text-gray-300 mb-1">Nombre del Programa / Sesión:</label>
+                  <input id="input-program-name" type="text" value="${escapeHtml(state.title || 'Torneo Jeopardy')}" placeholder="Ej: Ciencias e Historia - 2º Bimestre" class="w-full p-2.5 rounded-lg bg-[#00021A] border border-blue-600 text-white font-bold text-sm focus:border-[#FFCC00] focus:outline-none" />
+                </div>
+
+                <div class="flex flex-col sm:flex-row items-center gap-3 pt-1">
+                  <input id="excel-file-input" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" class="hidden" />
+                  <button id="btn-trigger-upload" class="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 border-2 border-emerald-400 rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-2 cursor-pointer text-white shadow-md transition">
+                    📁 Subir Archivo Excel (.xlsx) o CSV
+                  </button>
+                  <button id="btn-save-current-program" class="w-full sm:w-auto px-4 py-2.5 bg-blue-900 hover:bg-blue-800 border border-blue-500 rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-1.5 cursor-pointer text-blue-200 transition">
+                    💾 Guardar actual en Firebase
+                  </button>
+                  <div class="text-xs text-blue-300 font-medium ml-auto">
+                    Categorías activas: <strong class="text-[#FFCC00] font-mono text-sm">${state.categories.length}</strong> (${state.categories.reduce((acc: number, c: any) => acc + (c.clues ? c.clues.length : 0), 0)} preguntas)
+                  </div>
+                </div>
+              </div>
+
+              <!-- Programas guardados en Firebase -->
+              <div class="bg-[#000428] border border-blue-800/80 rounded-xl p-3 space-y-2">
+                <span class="text-xs font-bold uppercase text-blue-300 block tracking-wider font-cinzel">B. Programas Guardados en Firebase</span>
+                <p class="text-[11px] text-gray-400">Selecciona un programa guardado previamente para cargarlo instantáneamente a la partida en vivo:</p>
+                <div class="flex flex-col sm:flex-row items-center gap-2">
+                  <select id="select-saved-program" class="flex-1 w-full p-2.5 rounded-lg bg-[#00021A] border border-blue-600 text-white font-medium text-xs focus:border-[#FFCC00] focus:outline-none cursor-pointer">
+                    <option value="">Cargando programas guardados...</option>
+                  </select>
+                  <div class="flex items-center gap-2 w-full sm:w-auto">
+                    <button id="btn-load-program" class="flex-1 sm:flex-none px-4 py-2.5 bg-[#FFCC00] hover:bg-yellow-400 text-[#000533] rounded-lg font-black text-xs uppercase flex items-center justify-center gap-1.5 cursor-pointer transition">
+                      ⚡ Cargar a Partida
+                    </button>
+                    <button id="btn-delete-program" title="Eliminar programa seleccionado" class="px-3 py-2.5 bg-rose-900/80 hover:bg-rose-700 border border-rose-500 rounded-lg text-white font-bold text-xs flex items-center justify-center cursor-pointer transition">
+                      🗑️
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1022,17 +1352,85 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
         </div>
       `;
 
-      document.getElementById('setup-title')?.addEventListener('input', (e: any) => state.title = e.target.value.trim() || 'Jeopardy');
+      document.getElementById('setup-title')?.addEventListener('input', (e: any) => {
+        const val = e.target.value.trim();
+        state.title = val || 'Jeopardy';
+        const progInput = document.getElementById('input-program-name') as HTMLInputElement;
+        if (progInput) progInput.value = state.title;
+      });
       document.getElementById('btn-logout-setup')?.addEventListener('click', executeGlobalLogout);
       document.getElementById('btn-goto-qr')?.addEventListener('click', () => { sound.playSelect(); state.status = 'qrcodes'; persistState(state); });
       document.getElementById('btn-start-game')?.addEventListener('click', () => { sound.playSelect(); state.status = 'game'; persistState(state); });
 
+      document.getElementById('btn-download-excel')?.addEventListener('click', downloadExcelSample);
       document.getElementById('btn-download-sample')?.addEventListener('click', downloadCSVSample);
-      const fileInput = document.getElementById('csv-file-input') as HTMLInputElement;
+
+      const fileInput = document.getElementById('excel-file-input') as HTMLInputElement;
       document.getElementById('btn-trigger-upload')?.addEventListener('click', () => fileInput?.click());
       fileInput?.addEventListener('change', (e: any) => {
-        if (e.target.files && e.target.files[0]) handleCSVUpload(e.target.files[0]);
+        if (e.target.files && e.target.files[0]) handleFileUpload(e.target.files[0]);
       });
+
+      const progNameInput = document.getElementById('input-program-name') as HTMLInputElement;
+      progNameInput?.addEventListener('input', (e: any) => {
+        const val = e.target.value.trim();
+        state.title = val || 'Jeopardy';
+        const setupTitle = document.getElementById('setup-title') as HTMLInputElement;
+        if (setupTitle) setupTitle.value = state.title;
+      });
+
+      document.getElementById('btn-save-current-program')?.addEventListener('click', async () => {
+        const name = (document.getElementById('input-program-name') as HTMLInputElement)?.value.trim() || state.title || 'Programa Jeopardy';
+        if (!state.categories || state.categories.length === 0) {
+          alert('No hay categorías ni preguntas activas para guardar.');
+          return;
+        }
+        try {
+          await saveProgramToFirebase(name, state.categories);
+          sound.playCorrect();
+          alert(`¡Programa "${name}" guardado exitosamente en Firebase!`);
+        } catch (err: any) {
+          alert('Error al guardar programa: ' + (err.message || err));
+        }
+      });
+
+      document.getElementById('btn-load-program')?.addEventListener('click', () => {
+        const selectEl = document.getElementById('select-saved-program') as HTMLSelectElement;
+        const selectedId = selectEl?.value;
+        if (!selectedId) {
+          alert('Por favor selecciona un programa de la lista desplegable.');
+          return;
+        }
+        const prog = savedPrograms.find(p => p.id === selectedId);
+        if (!prog) {
+          alert('No se encontró el programa seleccionado.');
+          return;
+        }
+        if (prog.categories && prog.categories.length > 0) {
+          state.categories = JSON.parse(JSON.stringify(prog.categories));
+          state.title = prog.name;
+          if (progNameInput) progNameInput.value = prog.name;
+          const setupTitle = document.getElementById('setup-title') as HTMLInputElement;
+          if (setupTitle) setupTitle.value = prog.name;
+          persistState(state);
+          sound.playSelect();
+          alert(`¡Programa "${prog.name}" cargado a la partida con éxito!\n(${prog.categories.length} categorías listas)`);
+        } else {
+          alert('El programa seleccionado no contiene categorías válidas.');
+        }
+      });
+
+      document.getElementById('btn-delete-program')?.addEventListener('click', () => {
+        const selectEl = document.getElementById('select-saved-program') as HTMLSelectElement;
+        const selectedId = selectEl?.value;
+        if (!selectedId) {
+          alert('Por favor selecciona un programa de la lista desplegable para eliminar.');
+          return;
+        }
+        deleteProgram(selectedId);
+      });
+
+      updateProgramsDropdownDOM();
 
       const maxInput = document.getElementById('setup-max-members') as HTMLInputElement;
       maxInput?.addEventListener('input', (e: any) => {
