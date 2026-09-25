@@ -317,6 +317,16 @@ export default function App() {
         state.buzzersUnlocked = Boolean(session.buzzersUnlocked);
         state.loadingDevicesState = session.loadingDevicesState !== undefined ? Boolean(session.loadingDevicesState) : true;
         if (session.status) state.status = session.status;
+        if (session.title) state.title = session.title;
+        if (session.categories && Array.isArray(session.categories) && session.categories.length > 0) {
+          state.categories = session.categories;
+        }
+        if (session.teamCount && typeof session.teamCount === 'number') {
+          state.teamCount = session.teamCount;
+        }
+        if (session.maxMembersPerTeam && typeof session.maxMembersPerTeam === 'number') {
+          state.maxMembersPerTeam = session.maxMembersPerTeam;
+        }
 
         if (!prevUnlocked && state.buzzersUnlocked && currentRole === 'player') {
           sound.playSelect();
@@ -327,6 +337,27 @@ export default function App() {
         }
 
         render();
+      });
+
+      // Sincronización inicial para asegurar que todos los dispositivos carguen el juego actual
+      fbDb.ref('sessions/jeopardy_game').once('value', (snap: any) => {
+        const session = snap.val();
+        if (session && session.categories && Array.isArray(session.categories) && session.categories.length > 0) {
+          state.categories = session.categories;
+          if (session.title) state.title = session.title;
+          if (session.teamCount) state.teamCount = session.teamCount;
+          if (session.maxMembersPerTeam) state.maxMembersPerTeam = session.maxMembersPerTeam;
+          render();
+        } else if (currentRole === 'host') {
+          fbDb.ref('sessions/jeopardy_game').update({
+            status: state.status,
+            title: state.title,
+            categories: state.categories,
+            teamCount: state.teamCount,
+            maxMembersPerTeam: state.maxMembersPerTeam,
+            lastUpdated: Date.now()
+          });
+        }
       });
     }
 
@@ -617,7 +648,14 @@ export default function App() {
       state = newState;
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
       if (fbDb && (currentRole === 'host' || currentRole === 'instructor')) {
-        fbDb.ref('sessions/jeopardy_game/status').set(newState.status);
+        fbDb.ref('sessions/jeopardy_game').update({
+          status: newState.status,
+          title: newState.title || 'Torneo Jeopardy Live Show',
+          categories: newState.categories || [],
+          teamCount: newState.teamCount || 3,
+          maxMembersPerTeam: newState.maxMembersPerTeam || 5,
+          lastUpdated: newState.lastUpdated
+        });
       }
       render();
     }
@@ -1348,62 +1386,30 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
               </div>
             </div>
 
-            <!-- 4. Control Remoto Móvil del Instructor (?role=instructor) -->
-            <div class="bg-gradient-to-r from-[#000842] via-[#1a1400] to-[#000842] border-2 border-[#FFCC00] rounded-2xl p-4 shadow-lg space-y-3">
-              <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-[#FFCC00]/30">
-                <div class="flex items-center gap-2">
-                  <span class="text-2xl">📱</span>
-                  <div>
-                    <label class="font-black text-xs uppercase text-[#FFCC00] font-cinzel">4. Control Remoto Móvil del Instructor (?role=instructor)</label>
-                    <p class="text-[11px] text-blue-200">Escanea con tu celular o tablet para moderar la partida en vivo: podrás ver preguntas, respuestas correctas secretas y botones de acción en tiempo real.</p>
-                  </div>
-                </div>
-                <span class="px-2.5 py-1 bg-[#FFCC00] text-[#000533] rounded-lg text-[10px] font-black uppercase tracking-wider">Modo Presentador</span>
+            <!-- Panel Informativo de Estado de Partida -->
+            <div class="bg-[#000428] border-2 border-blue-900/80 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow">
+              <div class="space-y-1">
+                <span class="text-xs uppercase font-black text-[#FFCC00] font-cinzel block">Resumen de Configuración Activa:</span>
+                <p class="text-xs text-blue-200">
+                  <strong class="text-white">${teamCount} equipos</strong> (máx. ${maxMembers} alumnos c/u) · 
+                  <strong class="text-[#FFCC00]">${state.categories.length} categorías</strong> (${state.categories.reduce((acc: number, c: any) => acc + (c.clues ? c.clues.length : 0), 0)} preguntas listas)
+                </p>
               </div>
-
-              <div class="flex flex-col sm:flex-row items-center gap-4 bg-[#00021A] p-3.5 rounded-xl border border-blue-900">
-                <div class="bg-white p-2.5 rounded-xl inline-block shadow shrink-0">
-                  <div id="setup-instructor-qr"></div>
-                </div>
-                <div class="flex-1 space-y-2 text-left w-full">
-                  <div class="flex items-center justify-between">
-                    <span class="text-xs text-amber-300 font-bold uppercase font-cinzel">Enlace Directo del Instructor:</span>
-                    <span class="text-[10px] text-emerald-400 font-mono">● Sin registro de equipo</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <input id="instructor-url-input" type="text" readonly class="flex-1 p-2 bg-[#000428] border border-blue-700 rounded-lg text-xs text-amber-300 font-mono select-all focus:outline-none" />
-                    <button id="btn-copy-instructor-url" type="button" class="px-3 py-2 bg-blue-900 hover:bg-blue-800 border border-blue-600 rounded-lg text-xs font-bold text-white transition cursor-pointer">Copiar</button>
-                    <button id="btn-open-instructor-url" type="button" class="px-3 py-2 bg-[#FFCC00] hover:bg-yellow-400 text-[#000533] rounded-lg text-xs font-black uppercase transition cursor-pointer">Abrir ↗</button>
-                  </div>
-                  <p class="text-[11px] text-slate-300">
-                    💡 <em>Tip:</em> Proyecta el tablero en la pantalla grande y usa tu celular como control remoto interactivo con la respuesta visible únicamente para ti.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div class="bg-[#000842] border-2 border-blue-900 rounded-2xl p-4">
-              <div class="flex justify-between items-center mb-2">
-                <label class="font-black text-xs uppercase text-[#FFCC00] font-cinzel">5. Concursantes Conectados en Tiempo Real</label>
+              <div class="flex items-center gap-2 bg-[#00021A] px-3 py-1.5 rounded-xl border border-blue-800">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span id="setup-total-connected-count" class="text-xs font-bold text-emerald-400">0 Conectados</span>
               </div>
-              <div class="grid gap-3" style="grid-template-columns: repeat(${teamCount}, minmax(0, 1fr));">
-                ${state.teams.slice(0, teamCount).map((t: any) => `
-                  <div class="border-2 rounded-xl p-2.5 bg-[#000428] text-center" style="border-color: ${t.color}">
-                    <span class="text-xs font-black uppercase text-white block truncate">${escapeHtml(t.name)}</span>
-                    <span id="setup-team-count-${t.id}" class="text-[11px] font-bold block mb-1" style="color: ${t.color}">0 / ${maxMembers} registrados</span>
-                    <div class="bg-white p-2 rounded-lg inline-block my-1">
-                      <div id="setup-qr-${t.id}"></div>
-                    </div>
-                    <div id="setup-team-members-${t.id}" class="bg-[#00021A] rounded p-1 min-h-[40px] text-[10px] text-blue-300">Esperando...</div>
-                  </div>
-                `).join('')}
-              </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 pt-2">
-              <button id="btn-goto-qr" class="py-3.5 bg-blue-900 border-2 border-blue-600 rounded-xl font-black text-xs uppercase hover:bg-blue-800 cursor-pointer">Proyectar QR en Pantalla Completa ⛶</button>
-              <button id="btn-start-game" class="py-3.5 bg-[#FFCC00] text-[#000533] rounded-xl font-black text-xs uppercase hover:bg-yellow-400 cursor-pointer">Comenzar Tablero ▶</button>
+            <!-- Botones de Acción: Botón Principal Ver Códigos QR -->
+            <div class="space-y-3 pt-2">
+              <button id="btn-goto-qr" class="w-full py-4 bg-gradient-to-r from-amber-500 via-[#FFCC00] to-yellow-400 hover:from-yellow-400 hover:to-amber-500 text-[#000533] rounded-2xl font-black text-base uppercase shadow-[0_0_35px_rgba(255,204,0,0.4)] flex items-center justify-center gap-3 cursor-pointer transition transform active:scale-98">
+                <span class="text-2xl">📲</span>
+                <span>Ver Códigos QR (QR)</span>
+              </button>
+              <button id="btn-start-game" class="w-full py-3 bg-blue-950 hover:bg-blue-900 text-blue-200 border border-blue-700 rounded-xl font-bold text-xs uppercase cursor-pointer transition flex items-center justify-center gap-2">
+                <span>Comenzar Tablero Directamente ▶</span>
+              </button>
             </div>
           </main>
         </div>
@@ -1507,42 +1513,6 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
           });
           render();
         });
-      });
-
-      state.teams.slice(0, teamCount).forEach((team: any) => {
-        const el = document.getElementById(`setup-qr-${team.id}`);
-        if (el && typeof window.QRCode === 'function') {
-          el.innerHTML = '';
-          new window.QRCode(el, {
-            text: `${window.location.origin}${window.location.pathname}?team=${team.id}`,
-            width: 100, height: 100, colorDark: '#000533', colorLight: '#ffffff'
-          });
-        }
-      });
-
-      // Generar código QR y configurar enlace del Instructor en Setup
-      const instUrl = getInstructorUrl();
-      const setupInstEl = document.getElementById('setup-instructor-qr');
-      if (setupInstEl && typeof window.QRCode === 'function') {
-        setupInstEl.innerHTML = '';
-        new window.QRCode(setupInstEl, {
-          text: instUrl,
-          width: 105, height: 105, colorDark: '#000533', colorLight: '#ffffff'
-        });
-      }
-      const setupInstInput = document.getElementById('instructor-url-input') as HTMLInputElement;
-      if (setupInstInput) setupInstInput.value = instUrl;
-
-      document.getElementById('btn-copy-instructor-url')?.addEventListener('click', () => {
-        navigator.clipboard?.writeText(instUrl).then(() => {
-          alert('¡Enlace del instructor copiado al portapapeles!');
-        }).catch(() => {
-          prompt('Copia este enlace para el instructor:', instUrl);
-        });
-      });
-
-      document.getElementById('btn-open-instructor-url')?.addEventListener('click', () => {
-        window.open(instUrl, '_blank');
       });
     }
 
@@ -1674,6 +1644,10 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
             </div>
 
             <div class="flex items-center gap-2">
+              <button id="btn-toggle-fullscreen" title="Activar/Desactivar Pantalla Completa" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase shadow cursor-pointer flex items-center gap-1.5 transition">
+                <span id="fullscreen-icon">⛶</span>
+                <span id="fullscreen-text">Pantalla Completa</span>
+              </button>
               <button id="btn-finish-game" class="px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase hover:bg-emerald-500 shadow cursor-pointer">Terminar Juego 🏆</button>
               <button id="btn-open-instructor-modal" class="px-3 py-1.5 rounded-xl bg-amber-500/25 text-amber-300 border border-amber-400/60 font-black text-xs uppercase hover:bg-amber-500/40 cursor-pointer flex items-center gap-1">📱 Mando Móvil</button>
               <button id="btn-view-qrcodes" class="px-3 py-1.5 rounded-xl bg-amber-500 text-black font-black text-xs uppercase hover:bg-amber-400 cursor-pointer">Ver QR</button>
@@ -1796,6 +1770,28 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
         </div>
       `;
+
+      document.getElementById('btn-toggle-fullscreen')?.addEventListener('click', () => {
+        sound.playSelect();
+        if (!document.fullscreenElement) {
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          }
+        } else {
+          if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          }
+        }
+      });
+
+      const handleFsChange = () => {
+        const icon = document.getElementById('fullscreen-icon');
+        const text = document.getElementById('fullscreen-text');
+        const isFs = Boolean(document.fullscreenElement);
+        if (icon) icon.textContent = isFs ? '🗗' : '⛶';
+        if (text) text.textContent = isFs ? 'Salir Pantalla' : 'Pantalla Completa';
+      };
+      document.addEventListener('fullscreenchange', handleFsChange);
 
       document.getElementById('btn-finish-game')?.addEventListener('click', () => {
         sound.playCorrect();
