@@ -211,7 +211,78 @@ export default function App() {
       isTeacherAuthenticated = true;
     }
 
-    if (currentRole === 'host') state.status = 'setup';
+    // CONTROL ESTRICTO DE INICIO DE SESIÓN PARA EL INSTRUCTOR (currentRole === 'host')
+    // Al iniciar o recargar la aplicación para el instructor, evitar estados fantasmas:
+    // forzar pantalla de Configuración ('setup'), marcadores en cero, sin pregunta activa y preguntas listas pero sin abrir
+    if (currentRole === 'host') {
+      state.status = 'setup';
+      state.activeClue = null;
+      state.currentTurn = null;
+      state.buzzQueue = [];
+      state.disqualifiedTeams = [];
+      state.buzzersUnlocked = false;
+      state.loadingDevicesState = true;
+      if (Array.isArray(state.teams)) {
+        state.teams.forEach((t: any) => { t.score = 0; });
+      }
+      if (Array.isArray(state.categories)) {
+        state.categories.forEach((cat: any) => {
+          if (Array.isArray(cat.clues)) {
+            cat.clues.forEach((cl: any) => { cl.isAnswered = false; });
+          }
+        });
+      }
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {}
+      try {
+        sessionStorage.removeItem('jeopardy_screen_history');
+      } catch (e) {}
+    }
+
+    // DETECCIÓN DE CIERRE DE PESTAÑA (beforeunload / pagehide)
+    // Limpia automáticamente el estado temporal de la partida en localStorage y notifica a Firebase
+    const handleHostTabExit = () => {
+      if (currentRole !== 'host') return;
+      try {
+        const cleanState = getDefaultState();
+        cleanState.status = 'setup';
+        cleanState.activeClue = null;
+        cleanState.currentTurn = null;
+        cleanState.buzzQueue = [];
+        cleanState.disqualifiedTeams = [];
+        cleanState.buzzersUnlocked = false;
+        cleanState.loadingDevicesState = true;
+        if (Array.isArray(state.categories)) {
+          cleanState.categories = JSON.parse(JSON.stringify(state.categories));
+          cleanState.categories.forEach((cat: any) => {
+            if (Array.isArray(cat.clues)) {
+              cat.clues.forEach((cl: any) => { cl.isAnswered = false; });
+            }
+          });
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanState));
+        sessionStorage.removeItem('jeopardy_screen_history');
+      } catch (e) {}
+
+      if (fbDb) {
+        try {
+          fbDb.ref('sessions/jeopardy_game').update({
+            status: 'setup',
+            activeClue: null,
+            activeTurn: null,
+            buzzQueue: null,
+            disqualifiedTeams: null,
+            buzzersUnlocked: false,
+            loadingDevicesState: true,
+            lastUpdated: Date.now()
+          });
+        } catch (e) {}
+      }
+    };
+
+    window.addEventListener('beforeunload', handleHostTabExit);
+    window.addEventListener('pagehide', handleHostTabExit);
 
     function getInstructorUrl(): string {
       return `${window.location.origin}${window.location.pathname}?role=instructor`;
@@ -268,6 +339,32 @@ export default function App() {
     function setupFirebaseSync() {
       if (!fbDb) return;
 
+      if (currentRole === 'host') {
+        const sessionRef = fbDb.ref('sessions/jeopardy_game');
+        sessionRef.child('activeClue').onDisconnect().remove();
+        sessionRef.child('activeTurn').onDisconnect().remove();
+        sessionRef.child('buzzQueue').onDisconnect().remove();
+        sessionRef.child('disqualifiedTeams').onDisconnect().remove();
+        sessionRef.child('buzzersUnlocked').onDisconnect().set(false);
+        sessionRef.child('status').onDisconnect().set('setup');
+
+        fbDb.ref('sessions/jeopardy_game').update({
+          status: 'setup',
+          activeClue: null,
+          activeTurn: null,
+          buzzQueue: null,
+          disqualifiedTeams: null,
+          buzzersUnlocked: false,
+          loadingDevicesState: true,
+          title: state.title,
+          categories: state.categories,
+          teamCount: state.teamCount,
+          maxMembersPerTeam: state.maxMembersPerTeam,
+          lastUpdated: Date.now()
+        });
+        fbDb.ref('jeopardy_game/teams').set(state.teams);
+      }
+
       fbDb.ref('.info/serverTimeOffset').on('value', (snap: any) => {
         serverTimeOffset = snap.val() || 0;
       });
@@ -310,22 +407,33 @@ export default function App() {
         const prevTurn = state.currentTurn;
         const prevUnlocked = state.buzzersUnlocked;
 
-        state.activeClue = session.activeClue || null;
-        state.currentTurn = session.activeTurn || null;
-        state.buzzQueue = session.buzzQueue ? Object.values(session.buzzQueue).sort((a: any, b: any) => a.timestamp - b.timestamp) : [];
-        state.disqualifiedTeams = session.disqualifiedTeams || [];
-        state.buzzersUnlocked = Boolean(session.buzzersUnlocked);
-        state.loadingDevicesState = session.loadingDevicesState !== undefined ? Boolean(session.loadingDevicesState) : true;
-        if (session.status) state.status = session.status;
-        if (session.title) state.title = session.title;
-        if (session.categories && Array.isArray(session.categories) && session.categories.length > 0) {
-          state.categories = session.categories;
-        }
-        if (session.teamCount && typeof session.teamCount === 'number') {
-          state.teamCount = session.teamCount;
-        }
-        if (session.maxMembersPerTeam && typeof session.maxMembersPerTeam === 'number') {
-          state.maxMembersPerTeam = session.maxMembersPerTeam;
+        if (currentRole === 'host' && state.status === 'setup') {
+          // El anfitrión en configuración inicial no admite preguntas activas ni estados avanzados residuales
+          state.activeClue = null;
+          state.currentTurn = null;
+          state.buzzQueue = [];
+          state.buzzersUnlocked = false;
+          if (session.title) state.title = session.title;
+          if (session.teamCount && typeof session.teamCount === 'number') state.teamCount = session.teamCount;
+          if (session.maxMembersPerTeam && typeof session.maxMembersPerTeam === 'number') state.maxMembersPerTeam = session.maxMembersPerTeam;
+        } else {
+          state.activeClue = session.activeClue || null;
+          state.currentTurn = session.activeTurn || null;
+          state.buzzQueue = session.buzzQueue ? Object.values(session.buzzQueue).sort((a: any, b: any) => a.timestamp - b.timestamp) : [];
+          state.disqualifiedTeams = session.disqualifiedTeams || [];
+          state.buzzersUnlocked = Boolean(session.buzzersUnlocked);
+          state.loadingDevicesState = session.loadingDevicesState !== undefined ? Boolean(session.loadingDevicesState) : true;
+          if (session.status) state.status = session.status;
+          if (session.title) state.title = session.title;
+          if (session.categories && Array.isArray(session.categories) && session.categories.length > 0) {
+            state.categories = session.categories;
+          }
+          if (session.teamCount && typeof session.teamCount === 'number') {
+            state.teamCount = session.teamCount;
+          }
+          if (session.maxMembersPerTeam && typeof session.maxMembersPerTeam === 'number') {
+            state.maxMembersPerTeam = session.maxMembersPerTeam;
+          }
         }
 
         if (!prevUnlocked && state.buzzersUnlocked && currentRole === 'player') {
@@ -342,7 +450,7 @@ export default function App() {
       // Sincronización inicial para asegurar que todos los dispositivos carguen el juego actual
       fbDb.ref('sessions/jeopardy_game').once('value', (snap: any) => {
         const session = snap.val();
-        if (session && session.categories && Array.isArray(session.categories) && session.categories.length > 0) {
+        if (currentRole !== 'host' && session && session.categories && Array.isArray(session.categories) && session.categories.length > 0) {
           state.categories = session.categories;
           if (session.title) state.title = session.title;
           if (session.teamCount) state.teamCount = session.teamCount;
@@ -2539,6 +2647,8 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('beforeunload', handleHostTabExit);
+      window.removeEventListener('pagehide', handleHostTabExit);
     };
   }, []);
 

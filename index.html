@@ -28,6 +28,107 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <!-- Control Estricto de Sesión y Limpieza de Pestaña para Instructor (Host) -->
+    <script>
+      (function() {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var role = params.get('role');
+          var team = params.get('team');
+          var isHost = (role !== 'instructor' && role !== 'player' && team === null);
+
+          // 1. Limpieza preventiva al cargar o recargar pestaña para el instructor
+          if (isHost) {
+            var raw = localStorage.getItem('jeopardy_state');
+            if (raw) {
+              try {
+                var state = JSON.parse(raw);
+                state.status = 'setup';
+                state.activeClue = null;
+                state.currentTurn = null;
+                state.buzzQueue = [];
+                state.disqualifiedTeams = [];
+                state.buzzersUnlocked = false;
+                state.loadingDevicesState = true;
+                if (Array.isArray(state.teams)) {
+                  state.teams.forEach(function(t) { t.score = 0; });
+                }
+                if (Array.isArray(state.categories)) {
+                  state.categories.forEach(function(cat) {
+                    if (Array.isArray(cat.clues)) {
+                      cat.clues.forEach(function(cl) { cl.isAnswered = false; });
+                    }
+                  });
+                }
+                localStorage.setItem('jeopardy_state', JSON.stringify(state));
+              } catch (e) {
+                localStorage.removeItem('jeopardy_state');
+              }
+            }
+            try { sessionStorage.removeItem('jeopardy_screen_history'); } catch (e) {}
+          }
+
+          // 2. Detección de Cierre de Pestaña (beforeunload / pagehide)
+          var handleTabExit = function() {
+            var p = new URLSearchParams(window.location.search);
+            var r = p.get('role');
+            var t = p.get('team');
+            if (r !== 'instructor' && r !== 'player' && t === null) {
+              try {
+                var cur = localStorage.getItem('jeopardy_state');
+                if (cur) {
+                  var data = JSON.parse(cur);
+                  data.status = 'setup';
+                  data.activeClue = null;
+                  data.currentTurn = null;
+                  data.buzzQueue = [];
+                  data.disqualifiedTeams = [];
+                  data.buzzersUnlocked = false;
+                  data.loadingDevicesState = true;
+                  if (Array.isArray(data.teams)) {
+                    data.teams.forEach(function(item) { item.score = 0; });
+                  }
+                  if (Array.isArray(data.categories)) {
+                    data.categories.forEach(function(cat) {
+                      if (Array.isArray(cat.clues)) {
+                        cat.clues.forEach(function(cl) { cl.isAnswered = false; });
+                      }
+                    });
+                  }
+                  localStorage.setItem('jeopardy_state', JSON.stringify(data));
+                }
+                sessionStorage.removeItem('jeopardy_screen_history');
+              } catch (err) {}
+
+              // Notificación a Firebase si está inicializado
+              try {
+                if (window.firebase && window.firebase.apps && window.firebase.apps.length > 0) {
+                  var db = window.firebase.database();
+                  if (db) {
+                    db.ref('sessions/jeopardy_game').update({
+                      status: 'setup',
+                      activeClue: null,
+                      activeTurn: null,
+                      buzzQueue: null,
+                      disqualifiedTeams: null,
+                      buzzersUnlocked: false,
+                      loadingDevicesState: true,
+                      lastUpdated: Date.now()
+                    });
+                  }
+                }
+              } catch (fbErr) {}
+            }
+          };
+
+          window.addEventListener('beforeunload', handleTabExit);
+          window.addEventListener('pagehide', handleTabExit);
+        } catch (globalErr) {
+          console.warn('Session handler init notice:', globalErr);
+        }
+      })();
+    </script>
   </head>
   <body class="bg-[#000533] text-white antialiased min-h-screen">
     <div id="root"></div>
