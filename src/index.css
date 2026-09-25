@@ -64,6 +64,8 @@
 .answered-card {
   background: #02061f !important;
   border-color: #0c163b !important;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.85) !important;
   cursor: not-allowed !important;
-  opacity: 0.25 !important;
+  pointer-events: none !important;
+  opacity: 0.22 !important;
 }

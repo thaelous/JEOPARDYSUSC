@@ -469,7 +469,16 @@ export default function App() {
       const clue = cat?.clues.find((cl: any) => cl.id === clueId);
       if (!clue || clue.isAnswered) return;
 
-      state.activeClue = { ...clue, categoryTitle: cat.title, catId: cat.id };
+      // Inhabilitar inmediatamente la casilla en el tablero (isAnswered = true)
+      clue.isAnswered = true;
+
+      state.activeClue = {
+        ...clue,
+        categoryTitle: cat.title,
+        catId: cat.id,
+        isAnswered: true,
+        showAnswer: false
+      };
       state.loadingDevicesState = true;
       state.currentTurn = null;
       state.buzzQueue = [];
@@ -480,6 +489,7 @@ export default function App() {
 
       if (fbDb) {
         fbDb.ref('sessions/jeopardy_game').update({
+          categories: state.categories,
           activeClue: state.activeClue,
           activeTurn: null,
           buzzQueue: null,
@@ -499,6 +509,26 @@ export default function App() {
         fbDb.ref('sessions/jeopardy_game').update({
           loadingDevicesState: false,
           buzzersUnlocked: true
+        });
+      }
+      persistState(state);
+    }
+
+    function toggleShowAnswer() {
+      if (!state.activeClue) return;
+      const willShow = !state.activeClue.showAnswer;
+      state.activeClue.showAnswer = willShow;
+      if (willShow) {
+        state.loadingDevicesState = false;
+        sound.playClueOpen();
+      } else {
+        sound.playSelect();
+      }
+
+      if (fbDb) {
+        fbDb.ref('sessions/jeopardy_game').update({
+          activeClue: state.activeClue,
+          loadingDevicesState: state.loadingDevicesState
         });
       }
       persistState(state);
@@ -530,6 +560,7 @@ export default function App() {
         if (fbDb) {
           fbDb.ref('jeopardy_game/teams').set(state.teams);
           fbDb.ref('sessions/jeopardy_game').update({
+            categories: state.categories,
             activeClue: null,
             activeTurn: null,
             buzzQueue: null,
@@ -591,6 +622,7 @@ export default function App() {
 
       if (fbDb) {
         fbDb.ref('sessions/jeopardy_game').update({
+          categories: state.categories,
           activeClue: null,
           activeTurn: null,
           buzzQueue: null,
@@ -616,6 +648,7 @@ export default function App() {
       if (fbDb) {
         fbDb.ref('jeopardy_game/teams').set(state.teams);
         fbDb.ref('sessions/jeopardy_game').update({
+          categories: state.categories,
           activeClue: null,
           activeTurn: null,
           buzzQueue: null,
@@ -1668,8 +1701,8 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                     <button
                       data-cat="${cat.id}" data-clue="${clue.id}"
                       ${clue.isAnswered ? 'disabled' : ''}
-                      class="clue-btn flex-1 min-h-[65px] rounded-xl border-2 sm:border-3 font-bebas text-3xl transition-all cursor-pointer ${
-                        clue.isAnswered ? 'answered-card' : 'glossy-clue-card bg-gradient-to-b from-[#0e17fa] to-[#03068e] border-[#FFCC00] text-[#FFCC00]'
+                      class="clue-btn flex-1 min-h-[65px] rounded-xl border-2 sm:border-3 font-bebas text-3xl transition-all ${
+                        clue.isAnswered ? 'answered-card pointer-events-none cursor-not-allowed' : 'glossy-clue-card bg-gradient-to-b from-[#0e17fa] to-[#03068e] border-[#FFCC00] text-[#FFCC00] cursor-pointer'
                       }"
                     >
                       ${clue.isAnswered ? '' : `$${clue.value}`}
@@ -1713,10 +1746,22 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                   </div>
                 ` : `
                   <!-- PANTALLA 2: PREGUNTA REVELADA -->
-                  <div class="my-auto">
+                  <div class="my-auto space-y-4 w-full">
                     <p class="text-3xl sm:text-5xl font-black text-white leading-relaxed">
                       "${escapeHtml(state.activeClue.question)}"
                     </p>
+
+                    <!-- DESPLIEGUE DE LA RESPUESTA CORRECTA EN PANTALLA PRINCIPAL -->
+                    ${state.activeClue.showAnswer ? `
+                      <div class="w-full max-w-2xl mx-auto bg-gradient-to-r from-amber-500/25 via-yellow-400/30 to-amber-500/25 border-3 border-[#FFCC00] rounded-2xl p-5 shadow-[0_0_60px_rgba(255,204,0,0.6)] animate-clue-zoom text-center space-y-2 mt-4">
+                        <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#FFCC00] text-[#000533] font-cinzel font-black text-xs uppercase tracking-widest shadow">
+                          <span>💡</span> RESPUESTA CORRECTA
+                        </div>
+                        <div class="text-2xl sm:text-4xl md:text-5xl font-black text-amber-300 font-cinzel tracking-wide drop-shadow-lg">
+                          ${escapeHtml(state.activeClue.answer || 'Sin respuesta registrada')}
+                        </div>
+                      </div>
+                    ` : ''}
                   </div>
 
                   <div class="w-full bg-[#000324] border-2 ${state.currentTurn ? 'border-emerald-400' : 'border-blue-700'} rounded-2xl p-4">
@@ -1749,7 +1794,10 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                     </div>
                   ` : ''}
 
-                  <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
+                  <div class="flex flex-wrap items-center justify-center gap-3 w-full pt-4">
+                    <button id="btn-toggle-show-answer-host" class="px-6 py-3.5 ${state.activeClue.showAnswer ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-[#FFCC00] hover:bg-yellow-400 text-[#000533]'} rounded-xl font-black text-sm uppercase shadow cursor-pointer transition flex items-center gap-1.5">
+                      <span>${state.activeClue.showAnswer ? '🙈 Ocultar Respuesta' : '💡 Mostrar Respuesta'}</span>
+                    </button>
                     ${state.currentTurn ? `
                       <button id="btn-mark-correct" class="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm uppercase shadow cursor-pointer">
                         ✓ Correcto (+$${state.activeClue.value})
@@ -1859,6 +1907,7 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
       });
 
       if (state.activeClue) {
+        document.getElementById('btn-toggle-show-answer-host')?.addEventListener('click', toggleShowAnswer);
         document.getElementById('btn-cancel-clue')?.addEventListener('click', cancelActiveClue);
         document.getElementById('btn-deploy-question')?.addEventListener('click', deployQuestion);
         document.getElementById('btn-mark-correct')?.addEventListener('click', () => handleAnswerEvaluation(true));
@@ -2147,19 +2196,43 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                   </div>
                 </div>
 
-                <!-- RESPUESTA CORRECTA: EXCLUSIVA DEL INSTRUCTOR -->
-                <div class="space-y-1">
+                <!-- RESPUESTA CORRECTA: EXCLUSIVA DEL INSTRUCTOR CON BOTÓN DE DESPLIEGUE EN VIVO -->
+                <div class="space-y-3 p-4 bg-gradient-to-b from-[#00103a] to-[#000824] rounded-2xl border-2 border-amber-400 shadow-lg">
                   <div class="flex items-center justify-between">
                     <span class="text-[11px] font-black uppercase text-amber-400 tracking-wider font-cinzel flex items-center gap-1.5">
                       <span>👁️ RESPUESTA CORRECTA</span>
-                      <span class="bg-amber-500 text-[#000533] text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Solo Instructor</span>
+                      <span class="bg-amber-500 text-[#000533] text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Mando Móvil</span>
                     </span>
-                    <span class="text-[10px] text-slate-400 italic">Oculta para alumnos</span>
+                    <span class="text-[10px] ${activeClue.showAnswer ? 'text-emerald-400 font-black' : 'text-slate-400 italic'}">
+                      ${activeClue.showAnswer ? '● VISIBLE EN PANTALLA' : '○ Oculta en pantalla'}
+                    </span>
                   </div>
-                  <div class="p-4 bg-gradient-to-r from-[#001438] to-[#0a1a4a] rounded-xl border-2 border-amber-400 text-amber-300 font-black text-lg sm:text-xl shadow-inner flex items-center gap-2.5">
+
+                  <!-- Tarjeta con la respuesta -->
+                  <div class="p-3.5 bg-[#000524] rounded-xl border border-amber-500/60 text-amber-300 font-black text-lg sm:text-xl flex items-center gap-2.5 shadow-inner">
                     <span class="text-amber-400 text-xl">💡</span>
-                    <span class="font-sans">${escapeHtml(activeClue.answer || 'Sin respuesta registrada')}</span>
+                    <span class="font-sans flex-1">${escapeHtml(activeClue.answer || 'Sin respuesta registrada')}</span>
                   </div>
+
+                  ${activeClue.showAnswer ? `
+                    <div class="p-2 rounded-xl bg-emerald-500/20 border border-emerald-400 text-emerald-300 text-xs font-bold flex items-center justify-center gap-2 animate-pulse">
+                      <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                      <span>¡RESPUESTA DESPLEGADA EN EL ESTUDIO!</span>
+                    </div>
+                  ` : ''}
+
+                  <!-- Botón interactivo y visible para desplegar la respuesta desde el móvil -->
+                  <button
+                    id="instructor-btn-toggle-answer"
+                    class="w-full py-4 px-4 rounded-xl font-black text-sm uppercase shadow-xl flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-95 ${
+                      activeClue.showAnswer
+                        ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-2 border-amber-400/70'
+                        : 'bg-gradient-to-r from-amber-400 via-[#FFCC00] to-yellow-400 hover:brightness-110 text-[#000533] border-2 border-yellow-200 shadow-[0_0_20px_rgba(255,204,0,0.3)]'
+                    }"
+                  >
+                    <span class="text-xl">${activeClue.showAnswer ? '🙈' : '📢'}</span>
+                    <span>${activeClue.showAnswer ? 'Ocultar Respuesta en Pantalla' : 'Mostrar Respuesta en Pantalla'}</span>
+                  </button>
                 </div>
 
                 <!-- ESTADO DEL TURNO / PULSADORES -->
@@ -2276,13 +2349,13 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                           <button
                             data-cat="${cat.id}" data-clue="${cl.id}"
                             ${cl.isAnswered ? 'disabled' : ''}
-                            class="instructor-clue-btn py-2.5 rounded-lg border font-mono font-bold text-xs transition cursor-pointer ${
+                            class="instructor-clue-btn py-2.5 rounded-lg border font-mono font-bold text-xs transition ${
                               cl.isAnswered 
-                                ? 'bg-blue-950/40 border-blue-900/40 text-blue-900 line-through cursor-not-allowed' 
-                                : 'bg-blue-900/80 hover:bg-amber-500 hover:text-[#000533] border-blue-600 text-yellow-300 active:scale-95'
+                                ? 'bg-blue-950/40 border-blue-900/40 text-blue-900 line-through cursor-not-allowed pointer-events-none opacity-25' 
+                                : 'bg-blue-900/80 hover:bg-amber-500 hover:text-[#000533] border-blue-600 text-yellow-300 active:scale-95 cursor-pointer'
                             }"
                           >
-                            $${cl.value}
+                            ${cl.isAnswered ? '✓' : `$${cl.value}`}
                           </button>
                         `).join('')}
                       </div>
@@ -2319,6 +2392,11 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
         if (confirm('¿Deseas salir del panel de instructor?')) {
           window.location.search = '';
         }
+      });
+
+      // Desplegar u ocultar respuesta correcta en tiempo real
+      document.getElementById('instructor-btn-toggle-answer')?.addEventListener('click', () => {
+        toggleShowAnswer();
       });
 
       // Selección de preguntas desde el celular
