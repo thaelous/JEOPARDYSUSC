@@ -194,14 +194,42 @@ export default function App() {
 
     const urlParams = new URLSearchParams(window.location.search);
     let assignedTeamId = urlParams.get('team') || null;
-    let currentRole = (urlParams.get('role') === 'player' || assignedTeamId !== null) ? 'player' : 'host';
+    const roleParam = urlParams.get('role');
+    let currentRole: 'player' | 'host' | 'instructor' = 'host';
+
+    if (roleParam === 'instructor') {
+      currentRole = 'instructor';
+    } else if (roleParam === 'player' || assignedTeamId !== null) {
+      currentRole = 'player';
+    } else {
+      currentRole = 'host';
+    }
+
+    let isTeacherAuthenticated = localStorage.getItem('auth_token_jeopardy') !== null;
+
+    // Si el enlace de instructor incluye credencial/token temporal de sesión, validar
+    const authParam = urlParams.get('auth') || urlParams.get('token');
+    if (authParam) {
+      try {
+        localStorage.setItem('auth_token_jeopardy', decodeURIComponent(authParam));
+        isTeacherAuthenticated = true;
+      } catch (e) {}
+    }
 
     if (currentRole === 'host') state.status = 'setup';
+
+    function getInstructorUrl(): string {
+      const token = localStorage.getItem('auth_token_jeopardy');
+      const base = `${window.location.origin}${window.location.pathname}`;
+      if (token) {
+        return `${base}?role=instructor&auth=${encodeURIComponent(token)}`;
+      }
+      return `${base}?role=instructor`;
+    }
 
     let fbFirestore: any = null;
     let fbDb: any = null;
     let serverTimeOffset = 0;
-    let isTeacherAuthenticated = localStorage.getItem('auth_token_jeopardy') !== null;
 
     const SAVED_PROGRAMS_KEY = 'jeopardy_saved_programs';
     function loadSavedProgramsLocal(): SavedProgram[] {
@@ -304,7 +332,7 @@ export default function App() {
           sound.playSelect();
         }
 
-        if (state.currentTurn && (!prevTurn || prevTurn.playerId !== state.currentTurn.playerId) && currentRole === 'host') {
+        if (state.currentTurn && (!prevTurn || prevTurn.playerId !== state.currentTurn.playerId) && (currentRole === 'host' || currentRole === 'instructor')) {
           sound.playBuzz();
         }
 
@@ -598,7 +626,7 @@ export default function App() {
       newState.lastUpdated = Date.now();
       state = newState;
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-      if (fbDb && currentRole === 'host') {
+      if (fbDb && (currentRole === 'host' || currentRole === 'instructor')) {
         fbDb.ref('sessions/jeopardy_game/status').set(newState.status);
       }
       render();
@@ -948,6 +976,15 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
       if (currentRole === 'player') {
         renderPlayerView(app);
+        return;
+      }
+
+      if (currentRole === 'instructor') {
+        if (!isTeacherAuthenticated) {
+          renderAuthModal(app);
+          return;
+        }
+        renderInstructorMobileView(app);
         return;
       }
 
@@ -1325,9 +1362,43 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
               </div>
             </div>
 
+            <!-- 4. Control Remoto Móvil del Instructor (?role=instructor) -->
+            <div class="bg-gradient-to-r from-[#000842] via-[#1a1400] to-[#000842] border-2 border-[#FFCC00] rounded-2xl p-4 shadow-lg space-y-3">
+              <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-[#FFCC00]/30">
+                <div class="flex items-center gap-2">
+                  <span class="text-2xl">📱</span>
+                  <div>
+                    <label class="font-black text-xs uppercase text-[#FFCC00] font-cinzel">4. Control Remoto Móvil del Instructor (?role=instructor)</label>
+                    <p class="text-[11px] text-blue-200">Escanea con tu celular o tablet para moderar la partida en vivo: podrás ver preguntas, respuestas correctas secretas y botones de acción en tiempo real.</p>
+                  </div>
+                </div>
+                <span class="px-2.5 py-1 bg-[#FFCC00] text-[#000533] rounded-lg text-[10px] font-black uppercase tracking-wider">Modo Presentador</span>
+              </div>
+
+              <div class="flex flex-col sm:flex-row items-center gap-4 bg-[#00021A] p-3.5 rounded-xl border border-blue-900">
+                <div class="bg-white p-2.5 rounded-xl inline-block shadow shrink-0">
+                  <div id="setup-instructor-qr"></div>
+                </div>
+                <div class="flex-1 space-y-2 text-left w-full">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs text-amber-300 font-bold uppercase font-cinzel">Enlace Directo del Instructor:</span>
+                    <span class="text-[10px] text-emerald-400 font-mono">● Sin registro de equipo</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <input id="instructor-url-input" type="text" readonly class="flex-1 p-2 bg-[#000428] border border-blue-700 rounded-lg text-xs text-amber-300 font-mono select-all focus:outline-none" />
+                    <button id="btn-copy-instructor-url" type="button" class="px-3 py-2 bg-blue-900 hover:bg-blue-800 border border-blue-600 rounded-lg text-xs font-bold text-white transition cursor-pointer">Copiar</button>
+                    <button id="btn-open-instructor-url" type="button" class="px-3 py-2 bg-[#FFCC00] hover:bg-yellow-400 text-[#000533] rounded-lg text-xs font-black uppercase transition cursor-pointer">Abrir ↗</button>
+                  </div>
+                  <p class="text-[11px] text-slate-300">
+                    💡 <em>Tip:</em> Proyecta el tablero en la pantalla grande y usa tu celular como control remoto interactivo con la respuesta visible únicamente para ti.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div class="bg-[#000842] border-2 border-blue-900 rounded-2xl p-4">
               <div class="flex justify-between items-center mb-2">
-                <label class="font-black text-xs uppercase text-[#FFCC00] font-cinzel">4. Concursantes Conectados en Tiempo Real</label>
+                <label class="font-black text-xs uppercase text-[#FFCC00] font-cinzel">5. Concursantes Conectados en Tiempo Real</label>
                 <span id="setup-total-connected-count" class="text-xs font-bold text-emerald-400">0 Conectados</span>
               </div>
               <div class="grid gap-3" style="grid-template-columns: repeat(${teamCount}, minmax(0, 1fr));">
@@ -1462,6 +1533,31 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
           });
         }
       });
+
+      // Generar código QR y configurar enlace del Instructor en Setup
+      const instUrl = getInstructorUrl();
+      const setupInstEl = document.getElementById('setup-instructor-qr');
+      if (setupInstEl && typeof window.QRCode === 'function') {
+        setupInstEl.innerHTML = '';
+        new window.QRCode(setupInstEl, {
+          text: instUrl,
+          width: 105, height: 105, colorDark: '#000533', colorLight: '#ffffff'
+        });
+      }
+      const setupInstInput = document.getElementById('instructor-url-input') as HTMLInputElement;
+      if (setupInstInput) setupInstInput.value = instUrl;
+
+      document.getElementById('btn-copy-instructor-url')?.addEventListener('click', () => {
+        navigator.clipboard?.writeText(instUrl).then(() => {
+          alert('¡Enlace del instructor copiado al portapapeles!');
+        }).catch(() => {
+          prompt('Copia este enlace para el instructor:', instUrl);
+        });
+      });
+
+      document.getElementById('btn-open-instructor-url')?.addEventListener('click', () => {
+        window.open(instUrl, '_blank');
+      });
     }
 
     // 2. PANTALLA COMPLETA DE CÓDIGOS QR
@@ -1492,6 +1588,36 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
             `).join('')}
           </div>
 
+          <!-- Mando Móvil del Instructor (?role=instructor) -->
+          <div class="max-w-7xl mx-auto w-full bg-gradient-to-r from-[#000842] via-[#1a1400] to-[#000842] border-2 border-[#FFCC00] rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-xl my-2">
+            <div class="flex items-center gap-3.5">
+              <div class="bg-white p-2 rounded-xl inline-block shadow shrink-0">
+                <div id="qrcode-box-instructor"></div>
+              </div>
+              <div class="text-left space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-xl">📱</span>
+                  <h3 class="font-cinzel font-black text-white uppercase text-base sm:text-lg">Código QR para Control Móvil del Instructor</h3>
+                  <span class="bg-[#FFCC00] text-[#000533] text-[10px] font-black uppercase px-2 py-0.5 rounded-md">Exclusivo Docente</span>
+                </div>
+                <p class="text-xs text-blue-200">
+                  Escanea desde tu móvil para moderar la partida en vivo: verás la pregunta, la respuesta correcta secreta y los controles de calificación.
+                </p>
+                <div class="text-[11px] text-amber-300 font-mono truncate max-w-md sm:max-w-xl">
+                  ${getInstructorUrl()}
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btn-copy-instructor-qr-url" class="px-3.5 py-2.5 bg-blue-900 border border-blue-600 rounded-xl text-xs font-bold text-white hover:bg-blue-800 transition cursor-pointer">
+                Copiar Enlace
+              </button>
+              <button id="btn-open-instructor-qr-url" class="px-4 py-2.5 bg-[#FFCC00] text-[#000533] rounded-xl text-xs font-black uppercase hover:bg-yellow-400 transition cursor-pointer">
+                Abrir Control ↗
+              </button>
+            </div>
+          </div>
+
           <div class="flex justify-between items-center pt-3 border-t border-blue-900">
             <span class="text-xs font-bold text-blue-200">Total Conectados: <strong id="qr-total-connected-count">0</strong></span>
             <button id="btn-start-game-qr" class="px-8 py-3 bg-[#FFCC00] text-[#000533] rounded-2xl font-black text-sm uppercase hover:bg-yellow-400 cursor-pointer">Iniciar Tablero 🚀</button>
@@ -1513,6 +1639,29 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
             width: qrSize, height: qrSize, colorDark: '#000533', colorLight: '#ffffff'
           });
         }
+      });
+
+      // Generar QR de Instructor en pantalla de QR
+      const instQrBox = document.getElementById('qrcode-box-instructor');
+      if (instQrBox && typeof window.QRCode === 'function') {
+        instQrBox.innerHTML = '';
+        new window.QRCode(instQrBox, {
+          text: getInstructorUrl(),
+          width: 100, height: 100, colorDark: '#000533', colorLight: '#ffffff'
+        });
+      }
+
+      document.getElementById('btn-copy-instructor-qr-url')?.addEventListener('click', () => {
+        const u = getInstructorUrl();
+        navigator.clipboard?.writeText(u).then(() => {
+          alert('¡Enlace del instructor copiado!');
+        }).catch(() => {
+          prompt('Enlace del instructor:', u);
+        });
+      });
+
+      document.getElementById('btn-open-instructor-qr-url')?.addEventListener('click', () => {
+        window.open(getInstructorUrl(), '_blank');
       });
     }
 
@@ -1540,6 +1689,7 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
             <div class="flex items-center gap-2">
               <button id="btn-finish-game" class="px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase hover:bg-emerald-500 shadow cursor-pointer">Terminar Juego 🏆</button>
+              <button id="btn-open-instructor-modal" class="px-3 py-1.5 rounded-xl bg-amber-500/25 text-amber-300 border border-amber-400/60 font-black text-xs uppercase hover:bg-amber-500/40 cursor-pointer flex items-center gap-1">📱 Mando Móvil</button>
               <button id="btn-view-qrcodes" class="px-3 py-1.5 rounded-xl bg-amber-500 text-black font-black text-xs uppercase hover:bg-amber-400 cursor-pointer">Ver QR</button>
               <button id="btn-game-setup" class="px-3 py-1.5 rounded-xl bg-blue-900 text-blue-200 font-bold text-xs uppercase border border-blue-700 hover:bg-blue-800 cursor-pointer">Configuración</button>
               <button id="btn-game-reset" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-200 font-bold text-xs uppercase border border-slate-600 hover:bg-slate-700 cursor-pointer">Reiniciar</button>
@@ -1667,6 +1817,53 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
         persistState(state);
       });
       document.getElementById('btn-view-qrcodes')?.addEventListener('click', () => { sound.playSelect(); state.status = 'qrcodes'; persistState(state); });
+      document.getElementById('btn-open-instructor-modal')?.addEventListener('click', () => {
+        sound.playSelect();
+        const existing = document.getElementById('modal-instructor-qr-overlay');
+        if (existing) existing.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'modal-instructor-qr-overlay';
+        modal.className = 'fixed inset-0 bg-[#000533]/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-clue-zoom';
+        modal.innerHTML = `
+          <div class="bg-[#000842] border-3 border-[#FFCC00] rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-[0_0_50px_rgba(255,204,0,0.3)]">
+            <div class="flex justify-between items-center pb-2 border-b border-blue-900">
+              <span class="font-cinzel font-black text-[#FFCC00] text-sm uppercase">📱 Control Remoto Instructor</span>
+              <button id="btn-close-instructor-modal" class="text-gray-400 hover:text-white font-black text-lg cursor-pointer">✕</button>
+            </div>
+            <p class="text-xs text-blue-200">Escanea este código con tu teléfono o tablet para controlar la partida en vivo:</p>
+            <div class="bg-white p-3 rounded-2xl inline-block shadow mx-auto">
+              <div id="game-modal-instructor-qr"></div>
+            </div>
+            <div class="text-[11px] text-amber-300 font-mono break-all bg-[#000324] p-2 rounded-lg border border-blue-800">
+              ${getInstructorUrl()}
+            </div>
+            <div class="flex gap-2">
+              <button id="btn-copy-game-inst-url" class="flex-1 py-2.5 bg-blue-900 hover:bg-blue-800 border border-blue-600 rounded-xl text-xs font-bold text-white uppercase cursor-pointer">Copiar Enlace</button>
+              <button id="btn-open-game-inst-url" class="py-2.5 px-4 bg-[#FFCC00] hover:bg-yellow-400 text-[#000533] rounded-xl text-xs font-black uppercase cursor-pointer">Abrir ↗</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+
+        const qrTarget = document.getElementById('game-modal-instructor-qr');
+        if (qrTarget && typeof window.QRCode === 'function') {
+          new window.QRCode(qrTarget, {
+            text: getInstructorUrl(),
+            width: 140, height: 140, colorDark: '#000533', colorLight: '#ffffff'
+          });
+        }
+
+        document.getElementById('btn-close-instructor-modal')?.addEventListener('click', () => {
+          modal.remove();
+        });
+        document.getElementById('btn-copy-game-inst-url')?.addEventListener('click', () => {
+          navigator.clipboard?.writeText(getInstructorUrl()).then(() => alert('¡Enlace del instructor copiado!')).catch(() => prompt('Copia:', getInstructorUrl()));
+        });
+        document.getElementById('btn-open-game-inst-url')?.addEventListener('click', () => {
+          window.open(getInstructorUrl(), '_blank');
+        });
+      });
       document.getElementById('btn-game-setup')?.addEventListener('click', () => { sound.playSelect(); state.status = 'setup'; persistState(state); });
       document.getElementById('btn-game-reset')?.addEventListener('click', executeResetBoard);
       document.getElementById('btn-game-logout')?.addEventListener('click', executeGlobalLogout);
@@ -1882,7 +2079,321 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
       });
     }
 
-    render();
+    // 6. VISTA MÓVIL DE CONTROL PARA EL INSTRUCTOR (?role=instructor)
+    function renderInstructorMobileView(appContainer: HTMLElement) {
+      const teamCount = state.teamCount || state.teams.length;
+      const activeTeams = state.teams.slice(0, teamCount);
+      const activeClue = state.activeClue;
+
+      appContainer.innerHTML = `
+        <div class="min-h-screen bg-[#000533] text-white flex flex-col justify-between">
+          <!-- BARRA SUPERIOR DE ESTADO DEL INSTRUCTOR -->
+          <header class="bg-[#000222] border-b-2 border-amber-500 px-4 py-3 sticky top-0 z-40 shadow-lg">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="w-8 h-8 rounded-lg bg-amber-500 text-[#000533] flex items-center justify-center font-cinzel font-black text-sm">📱</span>
+                <div>
+                  <h1 class="text-xs sm:text-sm font-black text-[#FFCC00] uppercase font-cinzel leading-none truncate max-w-[200px] sm:max-w-none">
+                    ${escapeHtml(state.title || 'Control Instructor')}
+                  </h1>
+                  <span class="text-[10px] text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Mando Remoto en Vivo
+                  </span>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-1.5">
+                <button id="btn-instructor-refresh" title="Refrescar vista" class="px-2.5 py-1.5 bg-blue-950 border border-blue-700 rounded-lg text-xs font-bold text-blue-200 hover:bg-blue-900 cursor-pointer">
+                  🔄
+                </button>
+                <button id="btn-instructor-exit" class="px-2.5 py-1.5 bg-rose-600/90 hover:bg-rose-500 rounded-lg text-xs font-bold text-white uppercase cursor-pointer">
+                  Salir
+                </button>
+              </div>
+            </div>
+
+            <!-- Resumen de puntuaciones de equipos -->
+            <div class="flex items-center gap-2 overflow-x-auto py-2 mt-2 border-t border-blue-900/60 no-scrollbar">
+              ${activeTeams.map((t: any) => `
+                <div class="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold" style="background-color: ${t.color}22; border-color: ${t.color};">
+                  <span class="w-2 h-2 rounded-full" style="background-color: ${t.color};"></span>
+                  <span class="text-[11px] text-gray-200 uppercase truncate max-w-[80px]">${escapeHtml(t.name)}:</span>
+                  <span class="font-mono font-black text-white">$${t.score}</span>
+                </div>
+              `).join('')}
+            </div>
+          </header>
+
+          <!-- CONTENIDO PRINCIPAL -->
+          <main class="flex-1 p-4 max-w-2xl mx-auto w-full flex flex-col justify-start">
+            ${activeClue ? `
+              <!-- TARJETA DE PREGUNTA ACTIVA CON DETALLES SECRETOS PARA EL INSTRUCTOR -->
+              <div class="bg-[#000842] border-3 border-[#FFCC00] rounded-2xl p-4 sm:p-5 shadow-[0_0_40px_rgba(255,204,0,0.25)] space-y-4">
+                
+                <!-- Encabezado de la Clue: Categoría y Puntos -->
+                <div class="flex justify-between items-center border-b border-blue-900/80 pb-3">
+                  <div>
+                    <span class="text-[10px] text-amber-400 uppercase font-black tracking-widest block">Categoría</span>
+                    <h2 class="font-cinzel text-base sm:text-lg font-black text-white uppercase">${escapeHtml(activeClue.categoryTitle || '')}</h2>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-[10px] text-blue-300 uppercase font-bold block">Valor</span>
+                    <span class="font-bebas text-3xl sm:text-4xl text-[#FFCC00]">$${activeClue.value}</span>
+                  </div>
+                </div>
+
+                <!-- Estado del Flujo de la Pregunta -->
+                <div class="p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 ${
+                  state.loadingDevicesState 
+                    ? 'bg-amber-500/15 border-amber-400 text-amber-300 animate-pulse' 
+                    : 'bg-emerald-500/15 border-emerald-400 text-emerald-300'
+                }">
+                  <span class="text-base">${state.loadingDevicesState ? '⏳' : '📢'}</span>
+                  <span>
+                    ${state.loadingDevicesState 
+                      ? 'Estado: CARGANDO DISPOSITIVOS (Oculta en pantalla grande)' 
+                      : 'Estado: PREGUNTA VISIBLE EN PANTALLA PRINCIPAL'}
+                  </span>
+                </div>
+
+                <!-- PREGUNTA ACTUAL -->
+                <div class="space-y-1">
+                  <span class="text-[11px] font-black uppercase text-blue-300 tracking-wider font-cinzel">Pregunta Actual:</span>
+                  <div class="p-3.5 bg-[#000324] rounded-xl border border-blue-700 text-white font-bold text-base sm:text-lg leading-snug">
+                    "${escapeHtml(activeClue.question)}"
+                  </div>
+                </div>
+
+                <!-- RESPUESTA CORRECTA: EXCLUSIVA DEL INSTRUCTOR -->
+                <div class="space-y-1">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-black uppercase text-amber-400 tracking-wider font-cinzel flex items-center gap-1.5">
+                      <span>👁️ RESPUESTA CORRECTA</span>
+                      <span class="bg-amber-500 text-[#000533] text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Solo Instructor</span>
+                    </span>
+                    <span class="text-[10px] text-slate-400 italic">Oculta para alumnos</span>
+                  </div>
+                  <div class="p-4 bg-gradient-to-r from-[#001438] to-[#0a1a4a] rounded-xl border-2 border-amber-400 text-amber-300 font-black text-lg sm:text-xl shadow-inner flex items-center gap-2.5">
+                    <span class="text-amber-400 text-xl">💡</span>
+                    <span class="font-sans">${escapeHtml(activeClue.answer || 'Sin respuesta registrada')}</span>
+                  </div>
+                </div>
+
+                <!-- ESTADO DEL TURNO / PULSADORES -->
+                <div class="p-3.5 rounded-xl border-2 ${state.currentTurn ? 'bg-emerald-950/40 border-emerald-400' : 'bg-blue-950/40 border-blue-700'} space-y-2">
+                  ${state.currentTurn ? `
+                    <div class="flex items-center justify-between">
+                      <span class="text-[10px] uppercase font-black tracking-widest text-emerald-400 animate-pulse">¡TIENE EL TURNO PARA RESPONDER!</span>
+                      <span class="text-[10px] font-mono text-slate-300">Pulsó primero</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <div class="w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg text-white" style="background-color: ${state.currentTurn.teamColor}">
+                        ${escapeHtml(state.currentTurn.teamName.charAt(0) || 'E')}
+                      </div>
+                      <div>
+                        <h4 class="text-lg font-black text-white uppercase">${escapeHtml(state.currentTurn.playerName)}</h4>
+                        <span class="text-xs font-bold uppercase" style="color: ${state.currentTurn.teamColor}">
+                          ${escapeHtml(state.currentTurn.teamName)}
+                        </span>
+                      </div>
+                    </div>
+                  ` : `
+                    <div class="text-center py-1">
+                      <div class="text-xs font-bold text-blue-200 flex items-center justify-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full ${state.buzzersUnlocked ? 'bg-emerald-400 animate-ping' : 'bg-slate-500'}"></span>
+                        <span>${state.buzzersUnlocked ? 'Timbres activos en dispositivos móviles. Esperando pulsador...' : 'Timbres bloqueados.'}</span>
+                      </div>
+                    </div>
+                  `}
+
+                  <!-- Cola de espera si otros pulsaron después -->
+                  ${(state.buzzQueue && state.buzzQueue.length > 0) ? `
+                    <div class="pt-2 border-t border-blue-900/60">
+                      <span class="text-[10px] font-bold uppercase text-slate-400 block mb-1">En cola de espera:</span>
+                      <div class="flex flex-wrap gap-1.5">
+                        ${state.buzzQueue.map((item: any, idx: number) => `
+                          <span class="px-2 py-0.5 rounded bg-blue-900 text-[10px] font-bold text-white border border-blue-600">
+                            #${idx + 2} ${escapeHtml(item.playerName)} (${escapeHtml(item.teamName)})
+                          </span>
+                        `).join('')}
+                      </div>
+                    </div>
+                  ` : ''}
+
+                  <!-- Equipos penalizados en esta pregunta -->
+                  ${(state.disqualifiedTeams && state.disqualifiedTeams.length > 0) ? `
+                    <div class="pt-1 text-[10px] text-rose-300">
+                      ✗ Equipos que ya fallaron: <strong>${state.disqualifiedTeams.join(', ')}</strong>
+                    </div>
+                  ` : ''}
+                </div>
+
+                <!-- BOTONES DE ACCIÓN EN TIEMPO REAL -->
+                <div class="space-y-2 pt-2">
+                  <span class="text-[11px] font-black uppercase text-[#FFCC00] tracking-wider font-cinzel block">
+                    Acciones de Control en Tiempo Real:
+                  </span>
+
+                  <!-- Botón 1: Desplegar Pregunta -->
+                  ${state.loadingDevicesState ? `
+                    <button id="instructor-btn-deploy" class="w-full py-4 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-[#000533] rounded-xl font-black text-sm uppercase shadow-lg flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98">
+                      <span class="text-lg">🚀</span> Desplegar Pregunta
+                    </button>
+                  ` : ''}
+
+                  <!-- Botones de Calificación cuando alguien pulsó -->
+                  ${state.currentTurn ? `
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button id="instructor-btn-correct" class="py-3.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-xs uppercase shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-98">
+                        <span>✓</span> Marcar Correcto (+$${activeClue.value})
+                      </button>
+                      <button id="instructor-btn-wrong" class="py-3.5 px-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-xs uppercase shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-98">
+                        <span>✗</span> Marcar Incorrecto / Pasar Turno
+                      </button>
+                    </div>
+                  ` : ''}
+
+                  <!-- Botón: Cerrar Pregunta -->
+                  <div class="flex items-center gap-2 pt-1">
+                    <button id="instructor-btn-cancel" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-xl font-bold text-xs uppercase cursor-pointer transition flex items-center justify-center gap-1">
+                      <span>✖</span> Cerrar Pregunta
+                    </button>
+                    ${!state.currentTurn && !state.loadingDevicesState ? `
+                      <button id="instructor-btn-reunlock" title="Reactivar timbres" class="py-3 px-3 bg-blue-900 hover:bg-blue-800 text-blue-200 border border-blue-600 rounded-xl font-bold text-xs uppercase cursor-pointer">
+                        🔓 Reabrir Timbres
+                      </button>
+                    ` : ''}
+                  </div>
+                </div>
+
+              </div>
+            ` : `
+              <!-- CUANDO NO HAY PREGUNTA ACTIVA: SELECCIONAR PREGUNTA DESDE EL CELULAR -->
+              <div class="space-y-4">
+                <div class="bg-[#000842] border-2 border-blue-900 rounded-2xl p-4 text-center space-y-2 shadow">
+                  <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-900 text-2xl mb-1">📋</div>
+                  <h3 class="font-cinzel font-black text-base sm:text-lg text-[#FFCC00] uppercase">Tablero de Preguntas</h3>
+                  <p class="text-xs text-blue-200">
+                    Toca cualquier casilla para abrir la pregunta directamente desde tu móvil. Se proyectará en la pantalla principal.
+                  </p>
+                </div>
+
+                <!-- Matriz de categorías y preguntas -->
+                <div class="space-y-3">
+                  ${state.categories.map((cat: any) => `
+                    <div class="bg-[#000428] border border-blue-900 rounded-xl p-3 space-y-2">
+                      <div class="flex justify-between items-center">
+                        <span class="font-cinzel text-xs font-black text-[#FFCC00] uppercase truncate">${escapeHtml(cat.title)}</span>
+                        <span class="text-[10px] text-blue-300 font-mono">
+                          ${cat.clues.filter((c: any) => !c.isAnswered).length} disp.
+                        </span>
+                      </div>
+                      <div class="grid grid-cols-5 gap-1.5">
+                        ${cat.clues.map((cl: any) => `
+                          <button
+                            data-cat="${cat.id}" data-clue="${cl.id}"
+                            ${cl.isAnswered ? 'disabled' : ''}
+                            class="instructor-clue-btn py-2.5 rounded-lg border font-mono font-bold text-xs transition cursor-pointer ${
+                              cl.isAnswered 
+                                ? 'bg-blue-950/40 border-blue-900/40 text-blue-900 line-through cursor-not-allowed' 
+                                : 'bg-blue-900/80 hover:bg-amber-500 hover:text-[#000533] border-blue-600 text-yellow-300 active:scale-95'
+                            }"
+                          >
+                            $${cl.value}
+                          </button>
+                        `).join('')}
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+
+                <!-- Controles globales para el instructor -->
+                <div class="bg-[#000428] border border-blue-900/60 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
+                  <button id="instructor-btn-finish-game" class="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold uppercase transition cursor-pointer">
+                    🏆 Ir al Podio
+                  </button>
+                  <button id="instructor-btn-reset-board" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 rounded-lg text-xs font-bold uppercase transition cursor-pointer">
+                    Reiniciar Tablero
+                  </button>
+                </div>
+              </div>
+            `}
+          </main>
+
+          <footer class="bg-[#000222] border-t border-blue-900/60 px-4 py-2 text-center text-[10px] text-blue-300">
+            Jeopardy Live Show · Panel Móvil de Instructor sincronizado con Firebase
+          </footer>
+        </div>
+      `;
+
+      // Event listeners para el instructor
+      document.getElementById('btn-instructor-refresh')?.addEventListener('click', () => {
+        sound.playSelect();
+        render();
+      });
+
+      document.getElementById('btn-instructor-exit')?.addEventListener('click', () => {
+        if (confirm('¿Deseas salir del panel de instructor?')) {
+          window.location.search = '';
+        }
+      });
+
+      // Selección de preguntas desde el celular
+      document.querySelectorAll('.instructor-clue-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const catId = btn.getAttribute('data-cat');
+          const clueId = btn.getAttribute('data-clue');
+          if (catId && clueId) {
+            openClue(catId, clueId);
+          }
+        });
+      });
+
+      // Desplegar pregunta
+      document.getElementById('instructor-btn-deploy')?.addEventListener('click', () => {
+        deployQuestion();
+      });
+
+      // Marcar correcto
+      document.getElementById('instructor-btn-correct')?.addEventListener('click', () => {
+        handleAnswerEvaluation(true);
+      });
+
+      // Marcar incorrecto / pasar turno
+      document.getElementById('instructor-btn-wrong')?.addEventListener('click', () => {
+        handleAnswerEvaluation(false);
+      });
+
+      // Cerrar / cancelar pregunta
+      document.getElementById('instructor-btn-cancel')?.addEventListener('click', () => {
+        cancelActiveClue();
+      });
+
+      // Reabrir timbres si no hay turno
+      document.getElementById('instructor-btn-reunlock')?.addEventListener('click', () => {
+        state.buzzersUnlocked = true;
+        sound.playSelect();
+        if (fbDb) {
+          fbDb.ref('sessions/jeopardy_game/buzzersUnlocked').set(true);
+        }
+        persistState(state);
+      });
+
+      // Ir al podio
+      document.getElementById('instructor-btn-finish-game')?.addEventListener('click', () => {
+        sound.playCorrect();
+        state.status = 'podium_teams';
+        persistState(state);
+      });
+
+      // Reiniciar tablero
+      document.getElementById('instructor-btn-reset-board')?.addEventListener('click', () => {
+        if (confirm('¿Estás seguro de reiniciar los puntajes y preguntas del tablero?')) {
+          executeResetBoard();
+        }
+      });
+    }
 
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown);

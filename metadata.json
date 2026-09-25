@@ -1,6 +1,6 @@
 {
   "name": "Jeopardy jrh",
-  "description": "Juego interactivo Jeopardy Live Show con licenciamiento Firestore, roles docente/concursante y sincronización en tiempo real.",
+  "description": "Juego interactivo Jeopardy Live Show con licenciamiento Firestore, roles docente/concursante, control móvil de instructor mediante QR y sincronización en tiempo real.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
