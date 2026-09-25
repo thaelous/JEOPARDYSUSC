@@ -206,25 +206,15 @@ export default function App() {
     }
 
     let isTeacherAuthenticated = localStorage.getItem('auth_token_jeopardy') !== null;
-
-    // Si el enlace de instructor incluye credencial/token temporal de sesión, validar
-    const authParam = urlParams.get('auth') || urlParams.get('token');
-    if (authParam) {
-      try {
-        localStorage.setItem('auth_token_jeopardy', decodeURIComponent(authParam));
-        isTeacherAuthenticated = true;
-      } catch (e) {}
+    if (currentRole === 'instructor') {
+      // El instructor que entra mediante el QR (?role=instructor) se autentica de inmediato sin pedir credenciales
+      isTeacherAuthenticated = true;
     }
 
     if (currentRole === 'host') state.status = 'setup';
 
     function getInstructorUrl(): string {
-      const token = localStorage.getItem('auth_token_jeopardy');
-      const base = `${window.location.origin}${window.location.pathname}`;
-      if (token) {
-        return `${base}?role=instructor&auth=${encodeURIComponent(token)}`;
-      }
-      return `${base}?role=instructor`;
+      return `${window.location.origin}${window.location.pathname}?role=instructor`;
     }
 
     let fbFirestore: any = null;
@@ -980,10 +970,6 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
       }
 
       if (currentRole === 'instructor') {
-        if (!isTeacherAuthenticated) {
-          renderAuthModal(app);
-          return;
-        }
         renderInstructorMobileView(app);
         return;
       }
