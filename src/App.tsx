@@ -211,74 +211,21 @@ export default function App() {
       isTeacherAuthenticated = true;
     }
 
-    // CONTROL ESTRICTO DE INICIO DE SESIÓN PARA EL INSTRUCTOR (currentRole === 'host')
-    // Al iniciar o recargar la aplicación para el instructor, evitar estados fantasmas:
-    // forzar pantalla de Configuración ('setup'), marcadores en cero, sin pregunta activa y preguntas listas pero sin abrir
+    // SINCRONIZACIÓN Y RESILIENCIA:
+    // Si hay una partida activa guardada ('game', 'qrcodes' o 'podium_teams'), se preserva
+    // para evitar que un refresco accidental o parpadeo de red reinicie la pantalla a 'setup'.
     if (currentRole === 'host') {
-      state.status = 'setup';
-      state.activeClue = null;
-      state.currentTurn = null;
-      state.buzzQueue = [];
-      state.disqualifiedTeams = [];
-      state.buzzersUnlocked = false;
-      state.loadingDevicesState = true;
-      if (Array.isArray(state.teams)) {
-        state.teams.forEach((t: any) => { t.score = 0; });
+      if (!state.status) {
+        state.status = 'setup';
       }
-      if (Array.isArray(state.categories)) {
-        state.categories.forEach((cat: any) => {
-          if (Array.isArray(cat.clues)) {
-            cat.clues.forEach((cl: any) => { cl.isAnswered = false; });
-          }
-        });
-      }
+    }
+
+    // PROTECCIÓN DE ESTADO ANTE RECARGA O CIERRE (beforeunload / pagehide)
+    // Guarda de forma segura el estado crítico en localStorage para tolerar refrescos accidentales
+    const handleHostTabExit = () => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       } catch (e) {}
-      try {
-        sessionStorage.removeItem('jeopardy_screen_history');
-      } catch (e) {}
-    }
-
-    // DETECCIÓN DE CIERRE DE PESTAÑA (beforeunload / pagehide)
-    // Limpia automáticamente el estado temporal de la partida en localStorage y notifica a Firebase
-    const handleHostTabExit = () => {
-      if (currentRole !== 'host') return;
-      try {
-        const cleanState = getDefaultState();
-        cleanState.status = 'setup';
-        cleanState.activeClue = null;
-        cleanState.currentTurn = null;
-        cleanState.buzzQueue = [];
-        cleanState.disqualifiedTeams = [];
-        cleanState.buzzersUnlocked = false;
-        cleanState.loadingDevicesState = true;
-        if (Array.isArray(state.categories)) {
-          cleanState.categories = JSON.parse(JSON.stringify(state.categories));
-          cleanState.categories.forEach((cat: any) => {
-            if (Array.isArray(cat.clues)) {
-              cat.clues.forEach((cl: any) => { cl.isAnswered = false; });
-            }
-          });
-        }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanState));
-        sessionStorage.removeItem('jeopardy_screen_history');
-      } catch (e) {}
-
-      if (fbDb) {
-        try {
-          fbDb.ref('sessions/jeopardy_game').update({
-            status: 'setup',
-            activeClue: null,
-            activeTurn: null,
-            buzzQueue: null,
-            disqualifiedTeams: null,
-            buzzersUnlocked: false,
-            loadingDevicesState: true,
-            lastUpdated: Date.now()
-          });
-        } catch (e) {}
-      }
     };
 
     window.addEventListener('beforeunload', handleHostTabExit);
@@ -339,32 +286,6 @@ export default function App() {
     function setupFirebaseSync() {
       if (!fbDb) return;
 
-      if (currentRole === 'host') {
-        const sessionRef = fbDb.ref('sessions/jeopardy_game');
-        sessionRef.child('activeClue').onDisconnect().remove();
-        sessionRef.child('activeTurn').onDisconnect().remove();
-        sessionRef.child('buzzQueue').onDisconnect().remove();
-        sessionRef.child('disqualifiedTeams').onDisconnect().remove();
-        sessionRef.child('buzzersUnlocked').onDisconnect().set(false);
-        sessionRef.child('status').onDisconnect().set('setup');
-
-        fbDb.ref('sessions/jeopardy_game').update({
-          status: 'setup',
-          activeClue: null,
-          activeTurn: null,
-          buzzQueue: null,
-          disqualifiedTeams: null,
-          buzzersUnlocked: false,
-          loadingDevicesState: true,
-          title: state.title,
-          categories: state.categories,
-          teamCount: state.teamCount,
-          maxMembersPerTeam: state.maxMembersPerTeam,
-          lastUpdated: Date.now()
-        });
-        fbDb.ref('jeopardy_game/teams').set(state.teams);
-      }
-
       fbDb.ref('.info/serverTimeOffset').on('value', (snap: any) => {
         serverTimeOffset = snap.val() || 0;
       });
@@ -389,41 +310,12 @@ export default function App() {
         }
       });
 
-      fbDb.ref('jeopardy_game/teams').on('value', (snap: any) => {
-        const val = snap.val() || {};
-        state.teams.forEach((team: any) => {
-          const tData = val[team.id];
-          if (tData && tData.players) {
-            team.members = Object.values(tData.players);
-          } else {
-            team.members = [];
-          }
-        });
-        updateLiveParticipantsDOM();
-      });
-
-      fbDb.ref('sessions/jeopardy_game').on('value', (snap: any) => {
-        const session = snap.val() || {};
-        const prevTurn = state.currentTurn;
-        const prevUnlocked = state.buzzersUnlocked;
-
-        if (currentRole === 'host' && state.status === 'setup') {
-          // El anfitrión en configuración inicial no admite preguntas activas ni estados avanzados residuales
-          state.activeClue = null;
-          state.currentTurn = null;
-          state.buzzQueue = [];
-          state.buzzersUnlocked = false;
-          if (session.title) state.title = session.title;
-          if (session.teamCount && typeof session.teamCount === 'number') state.teamCount = session.teamCount;
-          if (session.maxMembersPerTeam && typeof session.maxMembersPerTeam === 'number') state.maxMembersPerTeam = session.maxMembersPerTeam;
-        } else {
-          state.activeClue = session.activeClue || null;
-          state.currentTurn = session.activeTurn || null;
-          state.buzzQueue = session.buzzQueue ? Object.values(session.buzzQueue).sort((a: any, b: any) => a.timestamp - b.timestamp) : [];
-          state.disqualifiedTeams = session.disqualifiedTeams || [];
-          state.buzzersUnlocked = Boolean(session.buzzersUnlocked);
-          state.loadingDevicesState = session.loadingDevicesState !== undefined ? Boolean(session.loadingDevicesState) : true;
-          if (session.status) state.status = session.status;
+      // 1. CONSULTA INMEDIATA Y ROBUSTA DEL ESTADO REAL EN FIREBASE AL ARRANCAR
+      // Si la partida estaba en curso ('game'), en QR ('qrcodes') o en podio, restaura la vista de inmediato
+      fbDb.ref('sessions/jeopardy_game').once('value', (snap: any) => {
+        const session = snap.val();
+        if (session && session.status) {
+          state.status = session.status;
           if (session.title) state.title = session.title;
           if (session.categories && Array.isArray(session.categories) && session.categories.length > 0) {
             state.categories = session.categories;
@@ -434,7 +326,114 @@ export default function App() {
           if (session.maxMembersPerTeam && typeof session.maxMembersPerTeam === 'number') {
             state.maxMembersPerTeam = session.maxMembersPerTeam;
           }
+          state.activeClue = session.activeClue || null;
+          state.currentTurn = session.activeTurn || null;
+          state.buzzQueue = session.buzzQueue ? Object.values(session.buzzQueue).sort((a: any, b: any) => a.timestamp - b.timestamp) : [];
+          state.disqualifiedTeams = session.disqualifiedTeams || [];
+          state.buzzersUnlocked = Boolean(session.buzzersUnlocked);
+          state.loadingDevicesState = session.loadingDevicesState !== undefined ? Boolean(session.loadingDevicesState) : true;
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+          render();
+        } else if (currentRole === 'host') {
+          fbDb.ref('sessions/jeopardy_game').update({
+            status: state.status || 'setup',
+            title: state.title,
+            categories: state.categories,
+            teamCount: state.teamCount,
+            maxMembersPerTeam: state.maxMembersPerTeam,
+            lastUpdated: Date.now()
+          });
         }
+      });
+
+      // 2. PROTECCIÓN Y RESTAURACIÓN DE MARCADORES DESDE FIREBASE
+      fbDb.ref('jeopardy_game/teams').once('value', (snap: any) => {
+        const teamsData = snap.val();
+        if (teamsData) {
+          if (Array.isArray(teamsData) && teamsData.length > 0) {
+            teamsData.forEach((savedTeam: any) => {
+              const localTeam = state.teams.find((t: any) => t.id === savedTeam.id);
+              if (localTeam) {
+                if (typeof savedTeam.score === 'number') localTeam.score = savedTeam.score;
+                if (savedTeam.name) localTeam.name = savedTeam.name;
+                if (savedTeam.members) localTeam.members = Array.isArray(savedTeam.members) ? savedTeam.members : Object.values(savedTeam.members);
+              }
+            });
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+            render();
+          }
+        }
+      });
+
+      // 3. ESCUCHA DE EQUIPOS Y JUGADORES EN VIVO
+      fbDb.ref('jeopardy_game/teams').on('value', (snap: any) => {
+        const val = snap.val() || {};
+        if (Array.isArray(val)) {
+          val.forEach((savedTeam: any) => {
+            const localTeam = state.teams.find((t: any) => t.id === savedTeam.id);
+            if (localTeam) {
+              if (typeof savedTeam.score === 'number') localTeam.score = savedTeam.score;
+              if (savedTeam.members) {
+                localTeam.members = Array.isArray(savedTeam.members) ? savedTeam.members : Object.values(savedTeam.members);
+              }
+            }
+          });
+        } else {
+          state.teams.forEach((team: any) => {
+            const tData = val[team.id];
+            if (tData) {
+              if (typeof tData.score === 'number') team.score = tData.score;
+              if (tData.players) {
+                team.members = Object.values(tData.players);
+              } else if (tData.members) {
+                team.members = Array.isArray(tData.members) ? tData.members : Object.values(tData.members);
+              } else {
+                team.members = [];
+              }
+            } else {
+              team.members = [];
+            }
+          });
+        }
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+        updateLiveParticipantsDOM();
+        updateScoreboardDOM();
+        if (state.status === 'podium_teams') {
+          render();
+        }
+      });
+
+      // 4. ESCUCHA DE SESIÓN EN TIEMPO REAL
+      fbDb.ref('sessions/jeopardy_game').on('value', (snap: any) => {
+        const session = snap.val() || {};
+        const prevTurn = state.currentTurn;
+        const prevUnlocked = state.buzzersUnlocked;
+
+        if (session.status) state.status = session.status;
+        if (session.title) state.title = session.title;
+        if (session.categories && Array.isArray(session.categories) && session.categories.length > 0) {
+          state.categories = session.categories;
+        }
+        if (session.teamCount && typeof session.teamCount === 'number') {
+          state.teamCount = session.teamCount;
+        }
+        if (session.maxMembersPerTeam && typeof session.maxMembersPerTeam === 'number') {
+          state.maxMembersPerTeam = session.maxMembersPerTeam;
+        }
+        if (session.teams && Array.isArray(session.teams) && session.teams.length > 0) {
+          session.teams.forEach((st: any) => {
+            const local = state.teams.find((t: any) => t.id === st.id);
+            if (local && typeof st.score === 'number') {
+              local.score = st.score;
+            }
+          });
+        }
+        state.activeClue = session.activeClue || null;
+        state.currentTurn = session.activeTurn || null;
+        state.buzzQueue = session.buzzQueue ? Object.values(session.buzzQueue).sort((a: any, b: any) => a.timestamp - b.timestamp) : [];
+        state.disqualifiedTeams = session.disqualifiedTeams || [];
+        state.buzzersUnlocked = Boolean(session.buzzersUnlocked);
+        state.loadingDevicesState = session.loadingDevicesState !== undefined ? Boolean(session.loadingDevicesState) : true;
 
         if (!prevUnlocked && state.buzzersUnlocked && currentRole === 'player') {
           sound.playSelect();
@@ -444,28 +443,9 @@ export default function App() {
           sound.playBuzz();
         }
 
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
         render();
-      });
-
-      // Sincronización inicial para asegurar que todos los dispositivos carguen el juego actual
-      fbDb.ref('sessions/jeopardy_game').once('value', (snap: any) => {
-        const session = snap.val();
-        if (currentRole !== 'host' && session && session.categories && Array.isArray(session.categories) && session.categories.length > 0) {
-          state.categories = session.categories;
-          if (session.title) state.title = session.title;
-          if (session.teamCount) state.teamCount = session.teamCount;
-          if (session.maxMembersPerTeam) state.maxMembersPerTeam = session.maxMembersPerTeam;
-          render();
-        } else if (currentRole === 'host') {
-          fbDb.ref('sessions/jeopardy_game').update({
-            status: state.status,
-            title: state.title,
-            categories: state.categories,
-            teamCount: state.teamCount,
-            maxMembersPerTeam: state.maxMembersPerTeam,
-            lastUpdated: Date.now()
-          });
-        }
+        updateScoreboardDOM();
       });
     }
 
@@ -572,6 +552,42 @@ export default function App() {
       if (totalQr) totalQr.textContent = String(total);
     }
 
+    function updateScoreboardDOM() {
+      const activeTeams = state.teams.slice(0, state.teamCount || state.teams.length);
+      activeTeams.forEach((t: any) => {
+        // Actualizar en el encabezado del tablero de juego de la computadora
+        const scoreEl = document.getElementById(`scoreboard-score-${t.id}`);
+        if (scoreEl) {
+          const formatted = `$${t.score}`;
+          if (scoreEl.textContent !== formatted) {
+            scoreEl.textContent = formatted;
+            scoreEl.classList.remove('scale-100');
+            scoreEl.classList.add('scale-125', 'text-[#FFCC00]');
+            setTimeout(() => {
+              scoreEl.classList.remove('scale-125', 'text-[#FFCC00]');
+              scoreEl.classList.add('scale-100');
+            }, 600);
+          }
+        }
+        // Actualizar en el panel de control móvil del instructor si está presente
+        const mobileScoreEl = document.getElementById(`instructor-mobile-score-${t.id}`);
+        if (mobileScoreEl) {
+          mobileScoreEl.textContent = `$${t.score}`;
+        }
+      });
+
+      // Si el contenedor del scoreboard en la pantalla principal no tiene el número de tarjetas correcto, reconstruirlo
+      const container = document.getElementById('game-scoreboard');
+      if (container && container.children.length !== activeTeams.length) {
+        container.innerHTML = activeTeams.map((t: any) => `
+          <div id="scoreboard-card-${t.id}" class="flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 transition-all duration-300 shadow" style="background-color: ${t.color}22; border-color:${t.color};">
+            <span class="text-xs uppercase font-black" style="color: ${t.color}">${escapeHtml(t.name)}:</span>
+            <span id="scoreboard-score-${t.id}" class="text-base font-black font-mono text-white transition-all transform duration-300 scale-100">$${t.score}</span>
+          </div>
+        `).join('');
+      }
+    }
+
     function openClue(catId: string, clueId: string) {
       const cat = state.categories.find((c: any) => c.id === catId);
       const clue = cat?.clues.find((cl: any) => cl.id === clueId);
@@ -674,9 +690,11 @@ export default function App() {
             buzzQueue: null,
             disqualifiedTeams: null,
             buzzersUnlocked: false,
-            loadingDevicesState: true
+            loadingDevicesState: true,
+            teams: state.teams
           });
         }
+        updateScoreboardDOM();
         persistState(state);
       } else {
         if (team) team.score -= clueVal;
@@ -695,9 +713,12 @@ export default function App() {
 
           if (fbDb) {
             fbDb.ref('jeopardy_game/teams').set(state.teams);
-            fbDb.ref('sessions/jeopardy_game/activeTurn').set(nextTurn);
-            fbDb.ref('sessions/jeopardy_game/buzzQueue').set(remainingQueue);
-            fbDb.ref('sessions/jeopardy_game/disqualifiedTeams').set(disq);
+            fbDb.ref('sessions/jeopardy_game').update({
+              teams: state.teams,
+              activeTurn: nextTurn,
+              buzzQueue: remainingQueue,
+              disqualifiedTeams: disq
+            });
           }
         } else {
           state.currentTurn = null;
@@ -705,14 +726,44 @@ export default function App() {
 
           if (fbDb) {
             fbDb.ref('jeopardy_game/teams').set(state.teams);
+            fbDb.ref('sessions/jeopardy_game').update({
+              teams: state.teams,
+              disqualifiedTeams: disq,
+              buzzersUnlocked: true
+            });
             fbDb.ref('sessions/jeopardy_game/activeTurn').remove();
             fbDb.ref('sessions/jeopardy_game/buzzQueue').remove();
-            fbDb.ref('sessions/jeopardy_game/disqualifiedTeams').set(disq);
-            fbDb.ref('sessions/jeopardy_game/buzzersUnlocked').set(true);
           }
         }
+        updateScoreboardDOM();
         persistState(state);
       }
+    }
+
+    // REINICIO Y DESBLOQUEO DE BUZZERS / TIMBRES (FALSA SALIDA O INTENTO ANTICIPADO)
+    function resetAndUnlockBuzzers(allowSameTeam: boolean = true) {
+      sound.playSelect();
+      const earlyTeamId = state.currentTurn?.teamId;
+
+      let disq = allowSameTeam ? [] : [...(state.disqualifiedTeams || [])];
+      if (!allowSameTeam && earlyTeamId) {
+        if (!disq.includes(earlyTeamId)) disq.push(earlyTeamId);
+      }
+
+      state.disqualifiedTeams = disq;
+      state.currentTurn = null;
+      state.buzzQueue = [];
+      state.buzzersUnlocked = true;
+
+      if (fbDb) {
+        fbDb.ref('sessions/jeopardy_game').update({
+          activeTurn: null,
+          buzzQueue: null,
+          disqualifiedTeams: disq,
+          buzzersUnlocked: true
+        });
+      }
+      persistState(state);
     }
 
     function cancelActiveClue() {
@@ -756,6 +807,7 @@ export default function App() {
       if (fbDb) {
         fbDb.ref('jeopardy_game/teams').set(state.teams);
         fbDb.ref('sessions/jeopardy_game').update({
+          teams: state.teams,
           categories: state.categories,
           activeClue: null,
           activeTurn: null,
@@ -765,6 +817,7 @@ export default function App() {
           loadingDevicesState: true
         });
       }
+      updateScoreboardDOM();
       persistState(state);
     }
 
@@ -835,10 +888,15 @@ export default function App() {
           categories: newState.categories || [],
           teamCount: newState.teamCount || 3,
           maxMembersPerTeam: newState.maxMembersPerTeam || 5,
+          teams: newState.teams || [],
           lastUpdated: newState.lastUpdated
         });
+        if (Array.isArray(newState.teams) && newState.teams.length > 0) {
+          fbDb.ref('jeopardy_game/teams').set(newState.teams);
+        }
       }
       render();
+      updateScoreboardDOM();
     }
 
     function escapeHtml(str: string) {
@@ -1839,11 +1897,11 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
               <h1 class="text-base sm:text-lg font-black text-white uppercase font-cinzel leading-none truncate max-w-[200px] lg:max-w-none">${escapeHtml(state.title)}</h1>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2">
+            <div id="game-scoreboard" class="flex flex-wrap items-center gap-2">
               ${activeTeams.map((t: any) => `
-                <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl border-2" style="background-color: ${t.color}22; border-color:${t.color};">
+                <div id="scoreboard-card-${t.id}" class="flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 transition-all duration-300 shadow" style="background-color: ${t.color}22; border-color:${t.color};">
                   <span class="text-xs uppercase font-black" style="color: ${t.color}">${escapeHtml(t.name)}:</span>
-                  <span class="text-base font-black font-mono text-white">$${t.score}</span>
+                  <span id="scoreboard-score-${t.id}" class="text-base font-black font-mono text-white transition-all transform duration-300 scale-100">$${t.score}</span>
                 </div>
               `).join('')}
             </div>
@@ -1977,6 +2035,9 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                       <button id="btn-mark-wrong" class="px-6 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-sm uppercase shadow cursor-pointer">
                         ✗ Incorrecto (-$${state.activeClue.value}) y Pasar Turno
                       </button>
+                      <button id="btn-reset-buzzers-host" class="px-5 py-3.5 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white rounded-xl font-black text-sm uppercase shadow cursor-pointer transition flex items-center gap-1.5">
+                        <span>⚡</span> Falsa Salida: Reiniciar Timbres
+                      </button>
                     ` : ''}
                     <button id="btn-cancel-clue" class="px-6 py-3.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase cursor-pointer">
                       Cerrar Pregunta
@@ -2084,6 +2145,7 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
         document.getElementById('btn-deploy-question')?.addEventListener('click', deployQuestion);
         document.getElementById('btn-mark-correct')?.addEventListener('click', () => handleAnswerEvaluation(true));
         document.getElementById('btn-mark-wrong')?.addEventListener('click', () => handleAnswerEvaluation(false));
+        document.getElementById('btn-reset-buzzers-host')?.addEventListener('click', () => resetAndUnlockBuzzers(true));
       }
     }
 
@@ -2330,7 +2392,7 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                 <div class="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold" style="background-color: ${t.color}22; border-color: ${t.color};">
                   <span class="w-2 h-2 rounded-full" style="background-color: ${t.color};"></span>
                   <span class="text-[11px] text-gray-200 uppercase truncate max-w-[80px]">${escapeHtml(t.name)}:</span>
-                  <span class="font-mono font-black text-white">$${t.score}</span>
+                  <span id="instructor-mobile-score-${t.id}" class="font-mono font-black text-white">$${t.score}</span>
                 </div>
               `).join('')}
             </div>
@@ -2487,16 +2549,43 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                         <span>✗</span> Marcar Incorrecto / Pasar Turno
                       </button>
                     </div>
+
+                    <!-- CONTROL DE FALSA SALIDA / REINICIO DE TIMBRES -->
+                    <div class="p-3.5 rounded-2xl bg-gradient-to-r from-amber-950/70 via-orange-950/60 to-amber-950/70 border-2 border-amber-400 space-y-2.5 shadow-lg">
+                      <div class="flex items-center justify-between">
+                        <span class="text-xs font-black uppercase text-amber-300 flex items-center gap-1.5 font-cinzel">
+                          <span>⚡</span> Falsa Salida / Intento Anticipado
+                        </span>
+                        <span class="text-[9px] bg-amber-400 text-[#000533] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">Control Buzzer</span>
+                      </div>
+                      <p class="text-xs text-amber-100/90 leading-tight">
+                        ¿<strong>${escapeHtml(state.currentTurn.playerName)}</strong> (${escapeHtml(state.currentTurn.teamName)}) oprimió antes de tiempo? Invalida este timbre sin quitarle puntos:
+                      </p>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        <button
+                          id="instructor-btn-reset-buzzers-all"
+                          class="py-3 px-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-[#000533] font-black text-xs uppercase rounded-xl shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition"
+                        >
+                          <span>⚡</span> Reiniciar Timbres (Permitir a Todos)
+                        </button>
+                        <button
+                          id="instructor-btn-penalize-early"
+                          class="py-3 px-2 bg-rose-900/90 hover:bg-rose-800 text-rose-100 border border-rose-500 font-black text-xs uppercase rounded-xl shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition"
+                        >
+                          <span>🚫</span> Bloquear ${escapeHtml(state.currentTurn.teamName)} y Reabrir Resto
+                        </button>
+                      </div>
+                    </div>
                   ` : ''}
 
-                  <!-- Botón: Cerrar Pregunta -->
+                  <!-- Botón: Cerrar Pregunta y Desbloquear Timbres -->
                   <div class="flex items-center gap-2 pt-1">
                     <button id="instructor-btn-cancel" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-xl font-bold text-xs uppercase cursor-pointer transition flex items-center justify-center gap-1">
                       <span>✖</span> Cerrar Pregunta
                     </button>
-                    ${!state.currentTurn && !state.loadingDevicesState ? `
-                      <button id="instructor-btn-reunlock" title="Reactivar timbres" class="py-3 px-3 bg-blue-900 hover:bg-blue-800 text-blue-200 border border-blue-600 rounded-xl font-bold text-xs uppercase cursor-pointer">
-                        🔓 Reabrir Timbres
+                    ${!state.currentTurn ? `
+                      <button id="instructor-btn-reunlock" title="Reactivar y desbloquear timbres en celulares" class="py-3 px-3 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 text-blue-100 border-2 border-blue-400 rounded-xl font-bold text-xs uppercase cursor-pointer flex items-center gap-1 shadow">
+                        <span>🔓</span> Desbloquear Timbres
                       </button>
                     ` : ''}
                   </div>
@@ -2616,14 +2705,19 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
         cancelActiveClue();
       });
 
-      // Reabrir timbres si no hay turno
+      // Falsa salida: Reiniciar timbres para todos (sin descontar puntos)
+      document.getElementById('instructor-btn-reset-buzzers-all')?.addEventListener('click', () => {
+        resetAndUnlockBuzzers(true);
+      });
+
+      // Falsa salida: Bloquear al equipo que se adelantó y reabrir timbres para los demás
+      document.getElementById('instructor-btn-penalize-early')?.addEventListener('click', () => {
+        resetAndUnlockBuzzers(false);
+      });
+
+      // Reabrir / forzar desbloqueo de timbres
       document.getElementById('instructor-btn-reunlock')?.addEventListener('click', () => {
-        state.buzzersUnlocked = true;
-        sound.playSelect();
-        if (fbDb) {
-          fbDb.ref('sessions/jeopardy_game/buzzersUnlocked').set(true);
-        }
-        persistState(state);
+        resetAndUnlockBuzzers(true);
       });
 
       // Ir al podio o volver al tablero
