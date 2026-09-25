@@ -676,6 +676,46 @@ export default function App() {
       render();
     }
 
+    let screenHistory: string[] = [];
+    try {
+      const savedHist = sessionStorage.getItem('jeopardy_screen_history');
+      if (savedHist) screenHistory = JSON.parse(savedHist);
+    } catch (e) {}
+
+    function pushScreenHistory(fromStatus: string) {
+      if (!fromStatus) return;
+      if (screenHistory.length === 0 || screenHistory[screenHistory.length - 1] !== fromStatus) {
+        screenHistory.push(fromStatus);
+        if (screenHistory.length > 25) screenHistory.shift();
+        try { sessionStorage.setItem('jeopardy_screen_history', JSON.stringify(screenHistory)); } catch (e) {}
+      }
+    }
+
+    function navigateScreen(targetStatus: string) {
+      if (state.status !== targetStatus) {
+        pushScreenHistory(state.status);
+      }
+      state.status = targetStatus;
+      sound.playSelect();
+      persistState(state);
+    }
+
+    function navigateBack(defaultFallback: string) {
+      sound.playSelect();
+      let prev: string | undefined = undefined;
+      while (screenHistory.length > 0) {
+        const candidate = screenHistory.pop();
+        if (candidate && candidate !== state.status) {
+          prev = candidate;
+          break;
+        }
+      }
+      try { sessionStorage.setItem('jeopardy_screen_history', JSON.stringify(screenHistory)); } catch (e) {}
+      const target = prev || defaultFallback;
+      state.status = target;
+      persistState(state);
+    }
+
     function persistState(newState: any) {
       newState.lastUpdated = Date.now();
       state = newState;
@@ -1328,9 +1368,18 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
       appContainer.innerHTML = `
         <div class="min-h-screen flex flex-col bg-[#000533] p-4">
-          <header class="flex justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4 mb-4">
-            <h1 class="text-lg font-black text-white uppercase font-cinzel">Configuración del Torneo Jeopardy</h1>
-            <button id="btn-logout-setup" class="px-3.5 py-1.5 rounded-xl bg-rose-600 font-bold text-xs uppercase hover:bg-rose-500">Cerrar Sesión Global</button>
+          <header class="flex flex-wrap justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4 mb-4 gap-3 shadow-lg">
+            <div class="flex items-center gap-3">
+              <button id="btn-back-setup-header" title="Volver a la pantalla anterior" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 border-2 border-blue-400 text-white font-black text-xs uppercase flex items-center gap-2 transition cursor-pointer shadow-md transform active:scale-95">
+                <span class="text-base">⬅</span>
+                <span>Volver / Regresar</span>
+              </button>
+              <div>
+                <h1 class="text-base sm:text-lg font-black text-white uppercase font-cinzel leading-none">Configuración del Torneo Jeopardy</h1>
+                <span class="text-[10px] text-blue-300 font-medium">Ajustes, categorías y banco de preguntas</span>
+              </div>
+            </div>
+            <button id="btn-logout-setup" class="px-3.5 py-2 rounded-xl bg-rose-600/90 font-bold text-xs uppercase text-white hover:bg-rose-500 transition cursor-pointer shadow">Cerrar Sesión Global</button>
           </header>
 
           <main class="max-w-4xl mx-auto w-full space-y-4">
@@ -1454,9 +1503,10 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
         const progInput = document.getElementById('input-program-name') as HTMLInputElement;
         if (progInput) progInput.value = state.title;
       });
+      document.getElementById('btn-back-setup-header')?.addEventListener('click', () => navigateBack('game'));
       document.getElementById('btn-logout-setup')?.addEventListener('click', executeGlobalLogout);
-      document.getElementById('btn-goto-qr')?.addEventListener('click', () => { sound.playSelect(); state.status = 'qrcodes'; persistState(state); });
-      document.getElementById('btn-start-game')?.addEventListener('click', () => { sound.playSelect(); state.status = 'game'; persistState(state); });
+      document.getElementById('btn-goto-qr')?.addEventListener('click', () => navigateScreen('qrcodes'));
+      document.getElementById('btn-start-game')?.addEventListener('click', () => navigateScreen('game'));
 
       document.getElementById('btn-download-excel')?.addEventListener('click', downloadExcelSample);
       document.getElementById('btn-download-sample')?.addEventListener('click', downloadCSVSample);
@@ -1556,11 +1606,20 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
       appContainer.innerHTML = `
         <div class="min-h-screen flex flex-col justify-between bg-[#000533] p-4">
-          <header class="flex justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4">
-            <h1 class="text-lg font-black text-white uppercase font-cinzel">Escanear para Unirse al Concurso</h1>
-            <div class="flex gap-2">
-              <button id="btn-back-setup" class="px-3 py-1.5 bg-blue-900 rounded-xl text-xs font-bold uppercase hover:bg-blue-800">Configuración</button>
-              <button id="btn-logout-qr" class="px-3 py-1.5 bg-rose-600 rounded-xl text-xs font-bold uppercase hover:bg-rose-500">Cerrar Sesión</button>
+          <header class="flex flex-wrap justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4 gap-3 shadow-lg">
+            <div class="flex items-center gap-3">
+              <button id="btn-back-qr-header" title="Volver a la pantalla anterior" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 border-2 border-blue-400 text-white font-black text-xs uppercase flex items-center gap-2 transition cursor-pointer shadow-md transform active:scale-95">
+                <span class="text-base">⬅</span>
+                <span>Volver / Regresar</span>
+              </button>
+              <div>
+                <h1 class="text-base sm:text-lg font-black text-white uppercase font-cinzel leading-none">Escanear para Unirse al Concurso</h1>
+                <span class="text-[10px] text-blue-300 font-medium">Códigos QR para equipos y control móvil del instructor</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btn-back-setup" class="px-3 py-2 bg-blue-950 border border-blue-700 text-blue-200 rounded-xl text-xs font-bold uppercase hover:bg-blue-900 transition cursor-pointer">Configuración</button>
+              <button id="btn-logout-qr" class="px-3.5 py-2 bg-rose-600/90 rounded-xl text-xs font-bold uppercase text-white hover:bg-rose-500 transition cursor-pointer shadow">Cerrar Sesión</button>
             </div>
           </header>
 
@@ -1614,9 +1673,10 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
         </div>
       `;
 
-      document.getElementById('btn-back-setup')?.addEventListener('click', () => { sound.playSelect(); state.status = 'setup'; persistState(state); });
+      document.getElementById('btn-back-qr-header')?.addEventListener('click', () => navigateBack('setup'));
+      document.getElementById('btn-back-setup')?.addEventListener('click', () => navigateScreen('setup'));
       document.getElementById('btn-logout-qr')?.addEventListener('click', executeGlobalLogout);
-      document.getElementById('btn-start-game-qr')?.addEventListener('click', () => { sound.playSelect(); state.status = 'game'; persistState(state); });
+      document.getElementById('btn-start-game-qr')?.addEventListener('click', () => navigateScreen('game'));
 
       const qrSize = teamCount <= 2 ? 200 : 150;
       activeTeams.forEach((team: any) => {
@@ -1661,10 +1721,14 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
       appContainer.innerHTML = `
         <div class="min-h-screen flex flex-col bg-[#000533]">
-          <header class="bg-[#000222] border-b-2 border-[#D4AF37] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30">
+          <header class="bg-[#000222] border-b-2 border-[#D4AF37] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30 shadow-lg">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-[#060CE9] border-2 border-[#FFCC00] flex items-center justify-center font-cinzel font-black text-[#FFCC00] text-xl shadow">J!</div>
-              <h1 class="text-base sm:text-lg font-black text-white uppercase font-cinzel leading-none">${escapeHtml(state.title)}</h1>
+              <button id="btn-game-back" title="Volver a la pantalla anterior" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 border-2 border-blue-400 text-white font-black text-xs uppercase flex items-center gap-1.5 transition cursor-pointer shadow-md transform active:scale-95">
+                <span class="text-base">⬅</span>
+                <span>Volver / Regresar</span>
+              </button>
+              <div class="w-10 h-10 rounded-xl bg-[#060CE9] border-2 border-[#FFCC00] flex items-center justify-center font-cinzel font-black text-[#FFCC00] text-xl shadow shrink-0">J!</div>
+              <h1 class="text-base sm:text-lg font-black text-white uppercase font-cinzel leading-none truncate max-w-[200px] lg:max-w-none">${escapeHtml(state.title)}</h1>
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
@@ -1841,12 +1905,12 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
       };
       document.addEventListener('fullscreenchange', handleFsChange);
 
+      document.getElementById('btn-game-back')?.addEventListener('click', () => navigateBack('qrcodes'));
       document.getElementById('btn-finish-game')?.addEventListener('click', () => {
         sound.playCorrect();
-        state.status = 'podium_teams';
-        persistState(state);
+        navigateScreen('podium_teams');
       });
-      document.getElementById('btn-view-qrcodes')?.addEventListener('click', () => { sound.playSelect(); state.status = 'qrcodes'; persistState(state); });
+      document.getElementById('btn-view-qrcodes')?.addEventListener('click', () => navigateScreen('qrcodes'));
       document.getElementById('btn-open-instructor-modal')?.addEventListener('click', () => {
         sound.playSelect();
         const existing = document.getElementById('modal-instructor-qr-overlay');
@@ -1894,7 +1958,7 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
           window.open(getInstructorUrl(), '_blank');
         });
       });
-      document.getElementById('btn-game-setup')?.addEventListener('click', () => { sound.playSelect(); state.status = 'setup'; persistState(state); });
+      document.getElementById('btn-game-setup')?.addEventListener('click', () => navigateScreen('setup'));
       document.getElementById('btn-game-reset')?.addEventListener('click', executeResetBoard);
       document.getElementById('btn-game-logout')?.addEventListener('click', executeGlobalLogout);
 
@@ -1923,9 +1987,15 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
       appContainer.innerHTML = `
         <div class="min-h-screen bg-[#000533] p-6 flex flex-col justify-between items-center text-center">
-          <header class="w-full max-w-4xl flex justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4">
-            <h1 class="text-xl font-black text-[#FFCC00] uppercase font-cinzel">🏆 PODIUM DE EQUIPOS GANADORES 🏆</h1>
-            <button id="btn-logout-podium-teams" class="px-3.5 py-1.5 bg-rose-600 rounded-xl text-xs font-bold uppercase hover:bg-rose-500 cursor-pointer">Cerrar Sesión</button>
+          <header class="w-full max-w-4xl flex flex-wrap justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4 gap-3 shadow-lg">
+            <div class="flex items-center gap-3">
+              <button id="btn-back-podium-header" title="Volver a la pantalla anterior" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 border-2 border-blue-400 text-white font-black text-xs uppercase flex items-center gap-2 transition cursor-pointer shadow-md transform active:scale-95">
+                <span class="text-base">⬅</span>
+                <span>Volver / Regresar</span>
+              </button>
+              <h1 class="text-lg sm:text-xl font-black text-[#FFCC00] uppercase font-cinzel leading-tight">🏆 PODIUM DE EQUIPOS GANADORES 🏆</h1>
+            </div>
+            <button id="btn-logout-podium-teams" class="px-3.5 py-2 bg-rose-600/90 rounded-xl text-xs font-bold uppercase text-white hover:bg-rose-500 transition cursor-pointer shadow">Cerrar Sesión</button>
           </header>
 
           <main class="my-auto max-w-4xl w-full space-y-6">
@@ -1946,20 +2016,22 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
             </div>
           </main>
 
-          <footer class="w-full max-w-4xl flex justify-end">
-            <button id="btn-back-setup-podium" class="px-8 py-3.5 bg-blue-900 border-2 border-blue-500 text-white rounded-2xl font-black text-base uppercase hover:bg-blue-800 shadow-lg cursor-pointer">
-              Volver a Configuración ⚙️
+          <footer class="w-full max-w-4xl flex flex-wrap justify-between items-center gap-3 pt-4">
+            <button id="btn-back-game-podium-footer" class="px-6 py-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 border-2 border-blue-400 text-white rounded-2xl font-black text-sm uppercase shadow-lg cursor-pointer flex items-center gap-2 transition transform active:scale-95">
+              <span>⬅</span>
+              <span>Volver al Tablero de Juego</span>
+            </button>
+            <button id="btn-back-setup-podium" class="px-6 py-3.5 bg-blue-950 border border-blue-700 text-blue-200 rounded-2xl font-bold text-sm uppercase hover:bg-blue-900 shadow cursor-pointer transition">
+              Ir a Configuración ⚙️
             </button>
           </footer>
         </div>
       `;
 
+      document.getElementById('btn-back-podium-header')?.addEventListener('click', () => navigateBack('game'));
+      document.getElementById('btn-back-game-podium-footer')?.addEventListener('click', () => navigateBack('game'));
+      document.getElementById('btn-back-setup-podium')?.addEventListener('click', () => navigateScreen('setup'));
       document.getElementById('btn-logout-podium-teams')?.addEventListener('click', executeGlobalLogout);
-      document.getElementById('btn-back-setup-podium')?.addEventListener('click', () => {
-        sound.playSelect();
-        state.status = 'setup';
-        persistState(state);
-      });
     }
 
     // 5. VISTA MÓVIL DEL PARTICIPANTE
@@ -2365,9 +2437,15 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
                 <!-- Controles globales para el instructor -->
                 <div class="bg-[#000428] border border-blue-900/60 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
-                  <button id="instructor-btn-finish-game" class="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold uppercase transition cursor-pointer">
-                    🏆 Ir al Podio
-                  </button>
+                  ${state.status === 'podium_teams' ? `
+                    <button id="instructor-btn-back-board" class="flex-1 py-2.5 bg-blue-900 hover:bg-blue-800 text-white border-2 border-blue-400 rounded-lg text-xs font-black uppercase transition cursor-pointer flex items-center justify-center gap-1.5 shadow">
+                      <span>⬅</span> <span>Volver al Tablero</span>
+                    </button>
+                  ` : `
+                    <button id="instructor-btn-finish-game" class="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold uppercase transition cursor-pointer">
+                      🏆 Ir al Podio
+                    </button>
+                  `}
                   <button id="instructor-btn-reset-board" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 rounded-lg text-xs font-bold uppercase transition cursor-pointer">
                     Reiniciar Tablero
                   </button>
@@ -2440,11 +2518,15 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
         persistState(state);
       });
 
-      // Ir al podio
+      // Ir al podio o volver al tablero
       document.getElementById('instructor-btn-finish-game')?.addEventListener('click', () => {
         sound.playCorrect();
-        state.status = 'podium_teams';
-        persistState(state);
+        navigateScreen('podium_teams');
+      });
+
+      document.getElementById('instructor-btn-back-board')?.addEventListener('click', () => {
+        sound.playSelect();
+        navigateScreen('game');
       });
 
       // Reiniciar tablero
