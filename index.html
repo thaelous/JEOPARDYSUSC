@@ -29,18 +29,26 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-    <!-- Sincronización Robusta del Estado del Instructor y Protección de Partida en Vivo -->
+    <!-- Sincronización Robusta del Estado del Instructor, Protección de Partida en Vivo y Branding Corporativo -->
     <script>
       (function() {
         try {
           // PROTECCIÓN DE ESTADO ANTE REFRESH O CIERRE ACCIDENTAL:
-          // Conserva íntegro el estado de la partida (puntajes, avance y pantalla activa)
+          // Conserva íntegro el estado de la partida (puntajes, avance, pantalla activa y branding corporativo)
           var saveCurrentState = function() {
             try {
               var s = localStorage.getItem('jeopardy_state');
               if (s) {
                 localStorage.setItem('jeopardy_state', s);
               }
+              var comp = localStorage.getItem('jeopardy_branding_company');
+              if (comp) localStorage.setItem('jeopardy_branding_company', comp);
+              var logo = localStorage.getItem('jeopardy_branding_logo');
+              if (logo) localStorage.setItem('jeopardy_branding_logo', logo);
+              var pal = localStorage.getItem('jeopardy_branding_palette');
+              if (pal) localStorage.setItem('jeopardy_branding_palette', pal);
+              var col = localStorage.getItem('jeopardy_branding_color');
+              if (col) localStorage.setItem('jeopardy_branding_color', col);
             } catch (err) {}
           };
 

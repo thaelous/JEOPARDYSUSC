@@ -163,11 +163,275 @@ export default function App() {
     const handlePointerDown = () => sound.init();
     window.addEventListener('pointerdown', handlePointerDown, { passive: true });
 
+    // PALETAS DE COLOR CORPORATIVAS (Branding y Diseño Profesional)
+    interface ThemeConfig {
+      name: string;
+      label: string;
+      bodyBg: string;
+      headerBg: string;
+      cardBg: string;
+      cardInner: string;
+      accent: string;
+      accentBorder: string;
+      subBorder: string;
+      clueFrom: string;
+      clueTo: string;
+      swatches: string[];
+    }
+
+    const THEME_PALETTES: Record<string, ThemeConfig> = {
+      azul: {
+        name: 'azul',
+        label: 'Azul Ejecutivo',
+        bodyBg: '#000533',
+        headerBg: '#000222',
+        cardBg: '#000842',
+        cardInner: '#000428',
+        accent: '#FFCC00',
+        accentBorder: '#D4AF37',
+        subBorder: '#1e40af',
+        clueFrom: '#0e17fa',
+        clueTo: '#03068e',
+        swatches: ['#000533', '#060CE9', '#FFCC00']
+      },
+      verde: {
+        name: 'verde',
+        label: 'Verde Corporativo',
+        bodyBg: '#022016',
+        headerBg: '#011710',
+        cardBg: '#043928',
+        cardInner: '#02261b',
+        accent: '#10B981',
+        accentBorder: '#F59E0B',
+        subBorder: '#059669',
+        clueFrom: '#059669',
+        clueTo: '#024e38',
+        swatches: ['#022016', '#059669', '#10B981']
+      },
+      atardecer: {
+        name: 'atardecer',
+        label: 'Atardecer',
+        bodyBg: '#23072b',
+        headerBg: '#17031c',
+        cardBg: '#380c45',
+        cardInner: '#260630',
+        accent: '#F59E0B',
+        accentBorder: '#EC4899',
+        subBorder: '#9d174d',
+        clueFrom: '#be185d',
+        clueTo: '#700936',
+        swatches: ['#23072b', '#be185d', '#F59E0B']
+      },
+      oscuro: {
+        name: 'oscuro',
+        label: 'Modo Oscuro',
+        bodyBg: '#090d16',
+        headerBg: '#030712',
+        cardBg: '#131b2e',
+        cardInner: '#0d1322',
+        accent: '#38BDF8',
+        accentBorder: '#94A3B8',
+        subBorder: '#334155',
+        clueFrom: '#1e293b',
+        clueTo: '#0f172a',
+        swatches: ['#090d16', '#1e293b', '#38BDF8']
+      }
+    };
+
+    // CONVERSIÓN DE COLOR Y GENERACIÓN DINÁMICA DE PALETAS
+    function hexToHsl(hex: string): { h: number; s: number; l: number } {
+      let c = hex.replace('#', '');
+      if (c.length === 3) c = c.split('').map(x => x + x).join('');
+      const r = parseInt(c.substring(0, 2), 16) / 255;
+      const g = parseInt(c.substring(2, 4), 16) / 255;
+      const b = parseInt(c.substring(4, 6), 16) / 255;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      let h = 0;
+      let s = 0;
+      const l = (max + min) / 2;
+      if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+          case g: h = ((b - r) / d + 2) / 6; break;
+          case b: h = ((r - g) / d + 4) / 6; break;
+        }
+      }
+      return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+    }
+
+    function hslToHex(h: number, s: number, l: number): string {
+      s = Math.max(0, Math.min(100, s)) / 100;
+      l = Math.max(0, Math.min(100, l)) / 100;
+      const a = s * Math.min(l, 1 - l);
+      const f = (n: number) => {
+        const k = (n + h / 30) % 12;
+        const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+        return Math.round(255 * color).toString(16).padStart(2, '0');
+      };
+      return `#${f(0)}${f(8)}${f(4)}`.toUpperCase();
+    }
+
+    // Genera una paleta de Jeopardy ejecutiva y balanceada a partir de cualquier color dominante extraído
+    function generateThemeFromColor(hexColor: string): ThemeConfig {
+      const hsl = hexToHsl(hexColor || '#FFCC00');
+      const h = hsl.h;
+      const s = Math.max(30, hsl.s);
+      
+      const accent = hslToHex(h, Math.max(s, 65), Math.max(48, Math.min(62, hsl.l)));
+      const accentBorder = hslToHex(h, Math.max(s, 70), Math.min(78, hsl.l + 14));
+      const subBorder = hslToHex(h, Math.min(s, 65), 26);
+      const cardBg = hslToHex(h, Math.min(s, 45), 11);
+      const cardInner = hslToHex(h, Math.min(s, 45), 7);
+      const headerBg = hslToHex(h, Math.min(s, 50), 4);
+      const bodyBg = hslToHex(h, Math.min(s, 50), 6);
+      const clueFrom = hslToHex(h, Math.max(s, 70), 38);
+      const clueTo = hslToHex(h, Math.max(s, 80), 20);
+
+      return {
+        name: 'corporativo',
+        label: 'Color del Logotipo (Auto)',
+        bodyBg,
+        headerBg,
+        cardBg,
+        cardInner,
+        accent,
+        accentBorder,
+        subBorder,
+        clueFrom,
+        clueTo,
+        swatches: [bodyBg, clueFrom, accent]
+      };
+    }
+
+    // EXTRACCIÓN AUTOMÁTICA DEL COLOR DOMINANTE CON CANVAS INVISIBLE
+    function extractDominantColor(imageSrc: string): Promise<string> {
+      return new Promise((resolve) => {
+        if (!imageSrc) {
+          resolve('#FFCC00');
+          return;
+        }
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const size = 70;
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            if (!ctx) {
+              resolve('#FFCC00');
+              return;
+            }
+            ctx.drawImage(img, 0, 0, size, size);
+            const imgData = ctx.getImageData(0, 0, size, size).data;
+
+            const colorCounts: Record<string, { r: number; g: number; b: number; count: number; score: number }> = {};
+            let maxScore = -1;
+            let dominantHex = '#FFCC00';
+
+            for (let i = 0; i < imgData.length; i += 4) {
+              const r = imgData[i];
+              const g = imgData[i + 1];
+              const b = imgData[i + 2];
+              const a = imgData[i + 3];
+
+              // Omitir píxeles transparentes o semi-transparentes
+              if (a < 125) continue;
+              // Omitir fondos blancos/claros comunes de logos
+              if (r > 230 && g > 230 && b > 230) continue;
+              // Omitir negros puros
+              if (r < 22 && g < 22 && b < 22) continue;
+
+              const qr = Math.round(r / 16) * 16;
+              const qg = Math.round(g / 16) * 16;
+              const qb = Math.round(b / 16) * 16;
+              const key = `${qr},${qg},${qb}`;
+
+              const max = Math.max(r, g, b);
+              const min = Math.min(r, g, b);
+              const delta = max - min;
+              const saturation = max === 0 ? 0 : delta / max;
+              const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+              // Ponderar positivamente colores con saturación y presencia corporativa
+              let weight = 1 + (saturation * 5);
+              if (brightness < 35 || brightness > 230) weight *= 0.4;
+
+              if (!colorCounts[key]) {
+                colorCounts[key] = { r: qr, g: qg, b: qb, count: 0, score: 0 };
+              }
+              colorCounts[key].count++;
+              colorCounts[key].score += weight;
+            }
+
+            for (const key in colorCounts) {
+              const item = colorCounts[key];
+              if (item.score > maxScore) {
+                maxScore = item.score;
+                const toHex = (n: number) => {
+                  const clamped = Math.max(0, Math.min(255, n));
+                  const h = clamped.toString(16);
+                  return h.length === 1 ? '0' + h : h;
+                };
+                dominantHex = `#${toHex(item.r)}${toHex(item.g)}${toHex(item.b)}`.toUpperCase();
+              }
+            }
+
+            if (maxScore <= 0) {
+              dominantHex = '#38BDF8';
+            }
+            resolve(dominantHex);
+          } catch (err) {
+            console.warn('Error en análisis de color con canvas:', err);
+            resolve('#FFCC00');
+          }
+        };
+        img.onerror = () => resolve('#FFCC00');
+        img.src = imageSrc;
+      });
+    }
+
+    function getTheme(paletteKey?: string): ThemeConfig {
+      const key = paletteKey || state?.branding?.palette || (state?.branding?.extractedColor ? 'corporativo' : 'azul');
+      if (key === 'corporativo' && state?.branding?.extractedColor) {
+        return generateThemeFromColor(state.branding.extractedColor);
+      }
+      return THEME_PALETTES[key] || (state?.branding?.extractedColor ? generateThemeFromColor(state.branding.extractedColor) : THEME_PALETTES.azul);
+    }
+
+    function applyTheme() {
+      const theme = getTheme();
+      document.body.style.backgroundColor = theme.bodyBg;
+      try {
+        const root = document.documentElement;
+        root.style.setProperty('--brand-accent', theme.accent);
+        root.style.setProperty('--brand-accent-border', theme.accentBorder);
+        root.style.setProperty('--brand-header-bg', theme.headerBg);
+        root.style.setProperty('--brand-body-bg', theme.bodyBg);
+        root.style.setProperty('--brand-card-bg', theme.cardBg);
+        root.style.setProperty('--brand-card-inner', theme.cardInner);
+        root.style.setProperty('--brand-sub-border', theme.subBorder);
+        root.style.setProperty('--brand-clue-from', theme.clueFrom);
+        root.style.setProperty('--brand-clue-to', theme.clueTo);
+      } catch (e) {}
+    }
+
     function getDefaultState(): any {
+      const savedExtracted = localStorage.getItem('jeopardy_branding_color') || '';
       return {
         roomCode: 'EN VIVO',
         status: 'setup',
         title: 'Torneo Jeopardy Live Show',
+        branding: {
+          companyName: localStorage.getItem('jeopardy_branding_company') || '',
+          logo: localStorage.getItem('jeopardy_branding_logo') || '',
+          palette: localStorage.getItem('jeopardy_branding_palette') || (savedExtracted ? 'corporativo' : 'azul'),
+          extractedColor: savedExtracted
+        },
         categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
         teamCount: 3,
         maxMembersPerTeam: 5,
@@ -185,7 +449,31 @@ export default function App() {
     function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (!parsed.branding) {
+            parsed.branding = {
+              companyName: localStorage.getItem('jeopardy_branding_company') || '',
+              logo: localStorage.getItem('jeopardy_branding_logo') || '',
+              palette: localStorage.getItem('jeopardy_branding_palette') || 'azul',
+              extractedColor: localStorage.getItem('jeopardy_branding_color') || ''
+            };
+          } else {
+            if (!parsed.branding.logo) {
+              parsed.branding.logo = localStorage.getItem('jeopardy_branding_logo') || '';
+            }
+            if (!parsed.branding.companyName && localStorage.getItem('jeopardy_branding_company')) {
+              parsed.branding.companyName = localStorage.getItem('jeopardy_branding_company') || '';
+            }
+            if (!parsed.branding.palette) {
+              parsed.branding.palette = localStorage.getItem('jeopardy_branding_palette') || 'azul';
+            }
+            if (!parsed.branding.extractedColor && localStorage.getItem('jeopardy_branding_color')) {
+              parsed.branding.extractedColor = localStorage.getItem('jeopardy_branding_color') || '';
+            }
+          }
+          return parsed;
+        }
       } catch (e) {}
       return getDefaultState();
     }
@@ -317,6 +605,24 @@ export default function App() {
         if (session && session.status) {
           state.status = session.status;
           if (session.title) state.title = session.title;
+          if (session.branding) {
+            if (session.branding.companyName !== undefined) {
+              state.branding.companyName = session.branding.companyName;
+              try { localStorage.setItem('jeopardy_branding_company', session.branding.companyName); } catch (e) {}
+            }
+            if (session.branding.palette) {
+              state.branding.palette = session.branding.palette;
+              try { localStorage.setItem('jeopardy_branding_palette', session.branding.palette); } catch (e) {}
+            }
+            if (session.branding.extractedColor) {
+              state.branding.extractedColor = session.branding.extractedColor;
+              try { localStorage.setItem('jeopardy_branding_color', session.branding.extractedColor); } catch (e) {}
+            }
+            if (session.branding.logo && !state.branding.logo) {
+              state.branding.logo = session.branding.logo;
+              try { localStorage.setItem('jeopardy_branding_logo', session.branding.logo); } catch (e) {}
+            }
+          }
           if (session.categories && Array.isArray(session.categories) && session.categories.length > 0) {
             state.categories = session.categories;
           }
@@ -338,6 +644,12 @@ export default function App() {
           fbDb.ref('sessions/jeopardy_game').update({
             status: state.status || 'setup',
             title: state.title,
+            branding: {
+              companyName: state.branding.companyName || '',
+              palette: state.branding.palette || 'azul',
+              extractedColor: state.branding.extractedColor || '',
+              ...(state.branding.logo && state.branding.logo.length < 150000 ? { logo: state.branding.logo } : {})
+            },
             categories: state.categories,
             teamCount: state.teamCount,
             maxMembersPerTeam: state.maxMembersPerTeam,
@@ -411,6 +723,26 @@ export default function App() {
 
         if (session.status) state.status = session.status;
         if (session.title) state.title = session.title;
+        if (session.branding) {
+          // PROTECCIÓN: No pisar el nombre si el usuario está tipeando en el input
+          const isTypingCompany = document.activeElement && (document.activeElement.id === 'input-company-name' || document.activeElement.id === 'branding-company-input');
+          if (!isTypingCompany && session.branding.companyName !== undefined && session.branding.companyName !== state.branding.companyName) {
+            state.branding.companyName = session.branding.companyName;
+            try { localStorage.setItem('jeopardy_branding_company', session.branding.companyName); } catch (e) {}
+          }
+          if (session.branding.extractedColor && session.branding.extractedColor !== state.branding.extractedColor) {
+            state.branding.extractedColor = session.branding.extractedColor;
+            try { localStorage.setItem('jeopardy_branding_color', session.branding.extractedColor); } catch (e) {}
+          }
+          if (session.branding.palette && session.branding.palette !== state.branding.palette) {
+            state.branding.palette = session.branding.palette;
+            try { localStorage.setItem('jeopardy_branding_palette', session.branding.palette); } catch (e) {}
+          }
+          if (session.branding.logo && session.branding.logo !== state.branding.logo) {
+            state.branding.logo = session.branding.logo;
+            try { localStorage.setItem('jeopardy_branding_logo', session.branding.logo); } catch (e) {}
+          }
+        }
         if (session.categories && Array.isArray(session.categories) && session.categories.length > 0) {
           state.categories = session.categories;
         }
@@ -444,6 +776,22 @@ export default function App() {
         }
 
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+        
+        // PROTECCIÓN CRÍTICA DE FOCO:
+        // Si estamos en la pantalla de setup y el usuario tiene el foco en algún input,
+        // NO destruir el árbol DOM con render() para evitar perder el foco del teclado!
+        const isInputFocused = document.activeElement && (
+          document.activeElement.tagName === 'INPUT' ||
+          document.activeElement.tagName === 'TEXTAREA' ||
+          document.activeElement.tagName === 'SELECT'
+        );
+
+        if (state.status === 'setup' && isInputFocused) {
+          updateLiveParticipantsDOM();
+          updateScoreboardDOM();
+          return;
+        }
+
         render();
         updateScoreboardDOM();
       });
@@ -882,7 +1230,7 @@ export default function App() {
       state = newState;
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
       if (fbDb && (currentRole === 'host' || currentRole === 'instructor')) {
-        fbDb.ref('sessions/jeopardy_game').update({
+        const updatePayload: any = {
           status: newState.status,
           title: newState.title || 'Torneo Jeopardy Live Show',
           categories: newState.categories || [],
@@ -890,12 +1238,30 @@ export default function App() {
           maxMembersPerTeam: newState.maxMembersPerTeam || 5,
           teams: newState.teams || [],
           lastUpdated: newState.lastUpdated
-        });
+        };
+        if (newState.branding) {
+          updatePayload.branding = {
+            companyName: newState.branding.companyName || '',
+            palette: newState.branding.palette || 'azul',
+            extractedColor: newState.branding.extractedColor || ''
+          };
+          if (newState.branding.logo && newState.branding.logo.length < 150000) {
+            updatePayload.branding.logo = newState.branding.logo;
+          }
+        }
+        fbDb.ref('sessions/jeopardy_game').update(updatePayload);
         if (Array.isArray(newState.teams) && newState.teams.length > 0) {
           fbDb.ref('jeopardy_game/teams').set(newState.teams);
         }
       }
-      render();
+      
+      const isInputFocused = document.activeElement && (
+        document.activeElement.tagName === 'INPUT' ||
+        document.activeElement.tagName === 'TEXTAREA'
+      );
+      if (state.status !== 'setup' || !isInputFocused) {
+        render();
+      }
       updateScoreboardDOM();
     }
 
@@ -1238,6 +1604,7 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
     }
 
     function render() {
+      applyTheme();
       const app = container;
       if (!app) return;
 
@@ -1529,29 +1896,221 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
     // 1. PANTALLA DE CONFIGURACIÓN
     function renderSetupScreen(appContainer: HTMLElement) {
+      const theme = getTheme();
+      const branding = state.branding || { companyName: '', logo: '', palette: 'azul' };
       const teamCount = state.teamCount || state.teams.length;
       const maxMembers = state.maxMembersPerTeam || 5;
 
       appContainer.innerHTML = `
-        <div class="min-h-screen flex flex-col bg-[#000533] p-4">
-          <header class="flex flex-wrap justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4 mb-4 gap-3 shadow-lg">
+        <div class="min-h-screen flex flex-col p-4 transition-colors duration-300" style="background-color: ${theme.bodyBg};">
+          <header class="flex flex-wrap justify-between items-center rounded-2xl p-4 mb-4 gap-3 shadow-lg border-2 transition-colors duration-300" style="background-color: ${theme.headerBg}; border-color: ${theme.accentBorder};">
             <div class="flex items-center gap-3">
               <button id="btn-back-setup-header" title="Volver a la pantalla anterior" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 border-2 border-blue-400 text-white font-black text-xs uppercase flex items-center gap-2 transition cursor-pointer shadow-md transform active:scale-95">
                 <span class="text-base">⬅</span>
                 <span>Volver / Regresar</span>
               </button>
+
+              ${branding.logo ? `
+                <div class="h-11 px-2.5 py-1 rounded-xl bg-white/10 backdrop-blur-sm border-2 flex items-center justify-center shadow shrink-0" style="border-color: ${theme.accent};">
+                  <img src="${branding.logo}" alt="Logotipo ${escapeHtml(branding.companyName || 'Empresa')}" class="h-8 max-w-[120px] object-contain drop-shadow" />
+                </div>
+              ` : `
+                <div class="w-10 h-10 rounded-xl border-2 flex items-center justify-center font-cinzel font-black text-xl shadow shrink-0" style="background-color: ${theme.cardInner}; border-color: ${theme.accent}; color: ${theme.accent};">J!</div>
+              `}
+
               <div>
+                <div id="setup-header-company-badge" class="${branding.companyName ? 'flex' : 'hidden'} items-center gap-1 leading-none mb-0.5 text-[10px] sm:text-[11px] font-black uppercase tracking-wider font-cinzel" style="color: ${theme.accent}">
+                  <span>🏢</span> <span id="setup-header-company-text">${escapeHtml(branding.companyName || '')}</span>
+                </div>
                 <h1 class="text-base sm:text-lg font-black text-white uppercase font-cinzel leading-none">Configuración del Torneo Jeopardy</h1>
-                <span class="text-[10px] text-blue-300 font-medium">Ajustes, categorías y banco de preguntas</span>
+                <span class="text-[10px] text-blue-300 font-medium">Ajustes, branding corporativo, categorías y banco de preguntas</span>
               </div>
             </div>
             <button id="btn-logout-setup" class="px-3.5 py-2 rounded-xl bg-rose-600/90 font-bold text-xs uppercase text-white hover:bg-rose-500 transition cursor-pointer shadow">Cerrar Sesión Global</button>
           </header>
 
           <main class="max-w-4xl mx-auto w-full space-y-4">
-            <div class="bg-[#000842] border-2 border-blue-900 rounded-2xl p-4">
-              <label class="block font-black text-xs uppercase text-[#FFCC00] mb-1 font-cinzel">1. Título del Concurso</label>
-              <input id="setup-title" type="text" value="${escapeHtml(state.title)}" class="w-full p-3 rounded-xl bg-[#000324] border border-blue-600 text-white font-bold" />
+
+            <!-- MÓDULO DE BRANDING CORPORATIVO Y PERSONALIZACIÓN DE DISEÑO -->
+            <div class="rounded-2xl p-5 border-2 shadow-lg space-y-5 transition-colors duration-300" style="background-color: ${theme.cardBg}; border-color: ${theme.accentBorder};">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b" style="border-color: ${theme.subBorder};">
+                <div class="flex items-center gap-2.5">
+                  <span class="text-2xl">🏢</span>
+                  <div>
+                    <h2 class="font-cinzel font-black text-sm sm:text-base uppercase tracking-wider" style="color: ${theme.accent};">
+                      Branding Corporativo y Personalización de Diseño
+                    </h2>
+                    <p class="text-[11px] text-slate-300">
+                      Configura la identidad de tu empresa para eventos de capacitación ejecutiva y torneos en vivo.
+                    </p>
+                  </div>
+                </div>
+                <span class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full border self-start sm:self-auto font-mono" style="background-color: ${theme.cardInner}; border-color: ${theme.accent}; color: ${theme.accent};">
+                  Personalización Activa
+                </span>
+              </div>
+
+              <!-- 1. Nombre de la Empresa -->
+              <div class="space-y-1.5">
+                <label for="input-company-name" class="block font-black text-xs uppercase font-cinzel tracking-wider" style="color: ${theme.accent};">
+                  1. Nombre de la Empresa / Institución
+                </label>
+                <div class="relative">
+                  <input
+                    id="input-company-name"
+                    name="companyName"
+                    type="text"
+                    value="${escapeHtml(branding.companyName || '')}"
+                    placeholder="Ej: Banco Corporativo Global, Tech Innovations Inc., Acme Corp..."
+                    class="branding-company-input w-full p-3 pl-10 rounded-xl text-white font-bold text-sm border-2 focus:outline-none transition shadow-inner"
+                    style="background-color: ${theme.cardInner}; border-color: ${theme.subBorder};"
+                  />
+                  <span class="absolute left-3 top-3.5 text-base">🏢</span>
+                </div>
+                <p class="text-[10px] text-slate-400">Este nombre se mostrará de forma persistente y elegante en el encabezado del tablero principal y del panel móvil del instructor.</p>
+              </div>
+
+              <!-- 2. Logotipo de la Empresa (Base64 / Extracción Automática con Canvas) -->
+              <div class="space-y-2 pt-1 border-t" style="border-color: ${theme.subBorder};">
+                <label class="block font-black text-xs uppercase font-cinzel tracking-wider" style="color: ${theme.accent};">
+                  2. Logotipo de la Empresa (Extracción Automática de Color)
+                </label>
+                
+                <input id="branding-logo-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="hidden" />
+
+                <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3.5 rounded-xl border-2" style="background-color: ${theme.cardInner}; border-color: ${theme.subBorder};">
+                  <!-- Visualizador / Previsualización del Logo -->
+                  <div class="flex-shrink-0 flex items-center justify-center min-w-[120px] h-16 p-1.5 rounded-xl border-2 bg-black/40 shadow-inner" style="border-color: ${branding.logo ? theme.accent : theme.subBorder};">
+                    ${branding.logo ? `
+                      <img id="branding-logo-preview" src="${branding.logo}" alt="Logotipo Corporativo" class="max-h-full max-w-[160px] object-contain" />
+                    ` : `
+                      <div class="flex flex-col items-center justify-center text-center text-slate-400">
+                        <span class="text-xl leading-none">🖼️</span>
+                        <span class="text-[9px] font-bold uppercase mt-1">Sin Logotipo</span>
+                      </div>
+                    `}
+                  </div>
+
+                  <!-- Botones de Acción de Logo -->
+                  <div class="flex-1 space-y-1.5">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        id="btn-trigger-logo-upload"
+                        class="px-4 py-2.5 rounded-xl font-black text-xs uppercase flex items-center gap-2 cursor-pointer shadow-md transition transform active:scale-95"
+                        style="background-color: ${theme.accent}; color: ${theme.headerBg};"
+                      >
+                        <span>📁</span>
+                        <span>${branding.logo ? 'Cambiar Logotipo' : 'Subir Logotipo'}</span>
+                      </button>
+
+                      ${branding.logo ? `
+                        <button
+                          type="button"
+                          id="btn-remove-logo"
+                          class="px-3.5 py-2.5 bg-rose-900/80 hover:bg-rose-800 text-rose-200 border border-rose-500 rounded-xl font-bold text-xs uppercase flex items-center gap-1.5 cursor-pointer transition"
+                        >
+                          <span>🗑️</span>
+                          <span>Quitar Logo</span>
+                        </button>
+                      ` : ''}
+                    </div>
+                    <p class="text-[10px] text-slate-300">
+                      Al subir el logo, un <strong>&lt;canvas&gt; invisible</strong> analiza automáticamente los píxeles y extrae el color dominante para teñir toda la aplicación.
+                    </p>
+                  </div>
+                </div>
+
+                ${branding.extractedColor ? `
+                  <div class="p-2.5 rounded-xl border flex items-center justify-between gap-2 shadow-sm" style="background-color: ${theme.cardInner}; border-color: ${theme.accent};">
+                    <div class="flex items-center gap-2">
+                      <span class="w-4 h-4 rounded-full border border-white shadow" style="background-color: ${branding.extractedColor};"></span>
+                      <span class="text-xs font-bold text-white">Color Corporativo Extraído del Logo: <strong class="font-mono" style="color: ${theme.accent};">${branding.extractedColor}</strong></span>
+                    </div>
+                    <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded shadow font-cinzel" style="background-color: ${theme.accent}; color: ${theme.headerBg};">Auto-Estilizado Activo</span>
+                  </div>
+                ` : ''}
+              </div>
+
+              <!-- 3. Selector de Paleta de Colores Predeterminada o Extraída -->
+              <div class="space-y-2.5 pt-1 border-t" style="border-color: ${theme.subBorder};">
+                <div class="flex items-center justify-between">
+                  <label class="block font-black text-xs uppercase font-cinzel tracking-wider" style="color: ${theme.accent};">
+                    3. Paleta de Colores Corporativa
+                  </label>
+                  <span class="text-[10px] text-slate-300">
+                    Paleta actual: <strong class="uppercase font-mono" style="color: ${theme.accent};">${theme.label}</strong>
+                  </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                  ${branding.extractedColor ? `
+                    <button
+                      type="button"
+                      data-palette="corporativo"
+                      class="palette-select-btn p-3 rounded-xl border-2 text-left transition transform active:scale-95 cursor-pointer relative flex flex-col justify-between gap-2.5 shadow ${
+                        (branding.palette === 'corporativo') ? 'ring-2 ring-white shadow-lg' : 'hover:brightness-110 opacity-80 hover:opacity-100'
+                      }"
+                      style="background-color: ${getTheme('corporativo').cardBg}; border-color: ${(branding.palette === 'corporativo') ? theme.accent : theme.subBorder};"
+                    >
+                      <div class="flex items-center justify-between w-full">
+                        <span class="font-cinzel text-xs font-black uppercase text-white tracking-wide truncate">
+                          🎨 Color del Logo
+                        </span>
+                        ${branding.palette === 'corporativo' ? `<span class="text-xs" style="color: ${theme.accent};">✓</span>` : ''}
+                      </div>
+
+                      <div class="flex items-center gap-1.5">
+                        ${getTheme('corporativo').swatches.map(c => `
+                          <span class="w-4 h-4 rounded-full border border-white/30 shadow-sm" style="background-color: ${c};"></span>
+                        `).join('')}
+                      </div>
+
+                      <div class="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded text-white/80 self-start" style="background-color: ${getTheme('corporativo').cardInner};">
+                        ${branding.palette === 'corporativo' ? '● ACTIVA (AUTO)' : 'Activar Logo'}
+                      </div>
+                    </button>
+                  ` : ''}
+
+                  ${Object.values(THEME_PALETTES).map(pal => {
+                    const isSelected = (branding.palette || 'azul') === pal.name;
+                    return `
+                      <button
+                        type="button"
+                        data-palette="${pal.name}"
+                        class="palette-select-btn p-3 rounded-xl border-2 text-left transition transform active:scale-95 cursor-pointer relative flex flex-col justify-between gap-2.5 shadow ${
+                          isSelected ? 'ring-2 ring-white shadow-lg' : 'hover:brightness-110 opacity-80 hover:opacity-100'
+                        }"
+                        style="background-color: ${pal.cardBg}; border-color: ${isSelected ? pal.accent : pal.subBorder};"
+                      >
+                        <div class="flex items-center justify-between w-full">
+                          <span class="font-cinzel text-xs font-black uppercase text-white tracking-wide truncate">
+                            ${pal.label}
+                          </span>
+                          ${isSelected ? `<span class="text-xs" style="color: ${pal.accent};">✓</span>` : ''}
+                        </div>
+
+                        <!-- Muestras de color (Swatches) -->
+                        <div class="flex items-center gap-1.5">
+                          ${pal.swatches.map(c => `
+                            <span class="w-4 h-4 rounded-full border border-white/30 shadow-sm" style="background-color: ${c};"></span>
+                          `).join('')}
+                        </div>
+
+                        <div class="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded text-white/80 self-start" style="background-color: ${pal.cardInner};">
+                          ${isSelected ? '● ACTIVA' : 'Seleccionar'}
+                        </div>
+                      </button>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            </div>
+
+            <!-- TÍTULO DEL CONCURSO -->
+            <div class="border-2 rounded-2xl p-4 transition-colors duration-300" style="background-color: ${theme.cardBg}; border-color: ${theme.subBorder};">
+              <label class="block font-black text-xs uppercase mb-1 font-cinzel" style="color: ${theme.accent};">Título del Concurso / Torneo</label>
+              <input id="setup-title" type="text" value="${escapeHtml(state.title)}" class="w-full p-3 rounded-xl border text-white font-bold" style="background-color: ${theme.cardInner}; border-color: ${theme.subBorder};" />
             </div>
 
             <div class="bg-[#000842] border-2 border-blue-900 rounded-2xl p-4 space-y-4">
@@ -1663,6 +2222,136 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
         </div>
       `;
 
+      // EVENTOS DE BRANDING CORPORATIVO Y PERSONALIZACIÓN DE DISEÑO
+      const companyInput = (document.getElementById('input-company-name') || document.getElementById('branding-company-input')) as HTMLInputElement;
+      let companySyncTimer: any = null;
+
+      companyInput?.addEventListener('input', (e: any) => {
+        const val = e.target.value;
+        state.branding.companyName = val;
+        try {
+          localStorage.setItem('jeopardy_branding_company', val);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (err) {}
+
+        // Actualizar el encabezado en tiempo real sin alterar ni recrear el nodo DOM del input
+        const headerText = document.getElementById('setup-header-company-text');
+        const headerBadge = document.getElementById('setup-header-company-badge');
+        if (headerText) {
+          headerText.textContent = val;
+        }
+        if (headerBadge) {
+          headerBadge.style.display = val.trim() ? 'flex' : 'none';
+        }
+
+        // Sincronizar de forma amortiguada (debounced) con Firebase para evitar colisiones y nunca re-renderizar al tipear
+        clearTimeout(companySyncTimer);
+        companySyncTimer = setTimeout(() => {
+          if (fbDb) {
+            fbDb.ref('sessions/jeopardy_game/branding').update({ companyName: val.trim() });
+          }
+        }, 500);
+      });
+
+      companyInput?.addEventListener('blur', () => {
+        const trimmed = companyInput.value.trim();
+        state.branding.companyName = trimmed;
+        try {
+          localStorage.setItem('jeopardy_branding_company', trimmed);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (err) {}
+        if (fbDb) {
+          fbDb.ref('sessions/jeopardy_game/branding').update({ companyName: trimmed });
+        }
+      });
+
+      const logoFileInput = document.getElementById('branding-logo-file') as HTMLInputElement;
+      document.getElementById('btn-trigger-logo-upload')?.addEventListener('click', () => logoFileInput?.click());
+
+      logoFileInput?.addEventListener('change', (e: any) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 2.5 * 1024 * 1024) {
+          alert('El archivo de imagen es demasiado pesado (máx. 2.5 MB). Por favor selecciona una imagen más liviana.');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = async (loadEvt) => {
+          const base64 = loadEvt.target?.result as string;
+          if (base64) {
+            state.branding.logo = base64;
+            try {
+              localStorage.setItem('jeopardy_branding_logo', base64);
+            } catch (err) {
+              console.warn('LocalStorage limit for logo:', err);
+            }
+
+            // EXTRACCIÓN AUTOMÁTICA DEL COLOR DOMINANTE CON CANVAS INVISIBLE
+            const dominantHex = await extractDominantColor(base64);
+            state.branding.extractedColor = dominantHex;
+            state.branding.palette = 'corporativo'; // Aplica automáticamente la paleta extraída del logo
+
+            try {
+              localStorage.setItem('jeopardy_branding_color', dominantHex);
+              localStorage.setItem('jeopardy_branding_palette', 'corporativo');
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            } catch (err) {}
+
+            if (fbDb) {
+              fbDb.ref('sessions/jeopardy_game/branding').update({
+                logo: base64.length < 150000 ? base64 : '',
+                extractedColor: dominantHex,
+                palette: 'corporativo'
+              });
+            }
+
+            applyTheme();
+            sound.playCorrect();
+            render();
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+
+      document.getElementById('btn-remove-logo')?.addEventListener('click', () => {
+        state.branding.logo = '';
+        state.branding.extractedColor = '';
+        state.branding.palette = 'azul';
+        try {
+          localStorage.removeItem('jeopardy_branding_logo');
+          localStorage.removeItem('jeopardy_branding_color');
+          localStorage.setItem('jeopardy_branding_palette', 'azul');
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (err) {}
+        if (fbDb) {
+          fbDb.ref('sessions/jeopardy_game/branding').update({
+            logo: '',
+            extractedColor: '',
+            palette: 'azul'
+          });
+        }
+        applyTheme();
+        sound.playSelect();
+        render();
+      });
+
+      document.querySelectorAll('.palette-select-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const palKey = btn.getAttribute('data-palette') || 'azul';
+          state.branding.palette = palKey;
+          try {
+            localStorage.setItem('jeopardy_branding_palette', palKey);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          } catch (err) {}
+          if (fbDb) {
+            fbDb.ref('sessions/jeopardy_game/branding').update({ palette: palKey });
+          }
+          applyTheme();
+          sound.playSelect();
+          render();
+        });
+      });
+
       document.getElementById('setup-title')?.addEventListener('input', (e: any) => {
         const val = e.target.value.trim();
         state.title = val || 'Jeopardy';
@@ -1767,18 +2456,34 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
     // 2. PANTALLA COMPLETA DE CÓDIGOS QR
     function renderQRCodesScreen(appContainer: HTMLElement) {
+      const theme = getTheme();
+      const branding = state.branding || { companyName: '', logo: '', palette: 'azul' };
       const teamCount = state.teamCount || state.teams.length;
       const activeTeams = state.teams.slice(0, teamCount);
 
       appContainer.innerHTML = `
-        <div class="min-h-screen flex flex-col justify-between bg-[#000533] p-4">
-          <header class="flex flex-wrap justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4 gap-3 shadow-lg">
+        <div class="min-h-screen flex flex-col justify-between p-4 transition-colors duration-300" style="background-color: ${theme.bodyBg};">
+          <header class="flex flex-wrap justify-between items-center rounded-2xl p-4 gap-3 shadow-lg border-2 transition-colors duration-300" style="background-color: ${theme.headerBg}; border-color: ${theme.accentBorder};">
             <div class="flex items-center gap-3">
               <button id="btn-back-qr-header" title="Volver a la pantalla anterior" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 border-2 border-blue-400 text-white font-black text-xs uppercase flex items-center gap-2 transition cursor-pointer shadow-md transform active:scale-95">
                 <span class="text-base">⬅</span>
                 <span>Volver / Regresar</span>
               </button>
+
+              ${branding.logo ? `
+                <div class="h-11 px-2.5 py-1 rounded-xl bg-white/10 backdrop-blur-sm border-2 flex items-center justify-center shadow shrink-0" style="border-color: ${theme.accent};">
+                  <img src="${branding.logo}" alt="Logotipo ${escapeHtml(branding.companyName || 'Empresa')}" class="h-8 max-w-[120px] object-contain drop-shadow" />
+                </div>
+              ` : `
+                <div class="w-10 h-10 rounded-xl border-2 flex items-center justify-center font-cinzel font-black text-xl shadow shrink-0" style="background-color: ${theme.cardInner}; border-color: ${theme.accent}; color: ${theme.accent};">J!</div>
+              `}
+
               <div>
+                ${branding.companyName ? `
+                  <div class="text-[10px] sm:text-[11px] font-black uppercase tracking-wider font-cinzel flex items-center gap-1 leading-none mb-0.5" style="color: ${theme.accent}">
+                    <span>🏢</span> <span>${escapeHtml(branding.companyName)}</span>
+                  </div>
+                ` : ''}
                 <h1 class="text-base sm:text-lg font-black text-white uppercase font-cinzel leading-none">Escanear para Unirse al Concurso</h1>
                 <span class="text-[10px] text-blue-300 font-medium">Códigos QR para equipos y control móvil del instructor</span>
               </div>
@@ -1882,19 +2587,38 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
     // 3. TABLERO DE JUEGO Y MODAL CON PANTALLA INTERMEDIA DE CARGANDO DISPOSITIVOS
     function renderGameScreen(appContainer: HTMLElement) {
+      const theme = getTheme();
+      const branding = state.branding || { companyName: '', logo: '', palette: 'azul' };
       const teamCount = state.teamCount || state.teams.length;
       const activeTeams = state.teams.slice(0, teamCount);
 
       appContainer.innerHTML = `
-        <div class="min-h-screen flex flex-col bg-[#000533]">
-          <header class="bg-[#000222] border-b-2 border-[#D4AF37] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30 shadow-lg">
+        <div class="min-h-screen flex flex-col transition-colors duration-300" style="background-color: ${theme.bodyBg};">
+          <header class="border-b-2 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30 shadow-lg transition-colors duration-300" style="background-color: ${theme.headerBg}; border-color: ${theme.accentBorder};">
             <div class="flex items-center gap-3">
               <button id="btn-game-back" title="Volver a la pantalla anterior" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 border-2 border-blue-400 text-white font-black text-xs uppercase flex items-center gap-1.5 transition cursor-pointer shadow-md transform active:scale-95">
                 <span class="text-base">⬅</span>
                 <span>Volver / Regresar</span>
               </button>
-              <div class="w-10 h-10 rounded-xl bg-[#060CE9] border-2 border-[#FFCC00] flex items-center justify-center font-cinzel font-black text-[#FFCC00] text-xl shadow shrink-0">J!</div>
-              <h1 class="text-base sm:text-lg font-black text-white uppercase font-cinzel leading-none truncate max-w-[200px] lg:max-w-none">${escapeHtml(state.title)}</h1>
+
+              <!-- BRANDING: Logotipo de la Empresa o Icono J! -->
+              ${branding.logo ? `
+                <div class="h-11 px-2.5 py-1 rounded-xl bg-white/10 backdrop-blur-sm border-2 flex items-center justify-center shadow shrink-0 transition" style="border-color: ${theme.accent};">
+                  <img src="${branding.logo}" alt="Logotipo ${escapeHtml(branding.companyName || 'Empresa')}" class="h-8 max-w-[130px] object-contain drop-shadow" />
+                </div>
+              ` : `
+                <div class="w-10 h-10 rounded-xl border-2 flex items-center justify-center font-cinzel font-black text-xl shadow shrink-0" style="background-color: ${theme.cardInner}; border-color: ${theme.accent}; color: ${theme.accent};">J!</div>
+              `}
+
+              <!-- TÍTULO Y NOMBRE DE LA EMPRESA -->
+              <div class="flex flex-col justify-center">
+                ${branding.companyName ? `
+                  <div class="text-[10px] sm:text-[11px] font-black uppercase tracking-wider font-cinzel flex items-center gap-1 leading-none mb-1 drop-shadow" style="color: ${theme.accent}">
+                    <span>🏢</span> <span>${escapeHtml(branding.companyName)}</span>
+                  </div>
+                ` : ''}
+                <h1 class="text-base sm:text-lg font-black text-white uppercase font-cinzel leading-none truncate max-w-[220px] lg:max-w-none">${escapeHtml(state.title)}</h1>
+              </div>
             </div>
 
             <div id="game-scoreboard" class="flex flex-wrap items-center gap-2">
@@ -1912,8 +2636,8 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                 <span id="fullscreen-text">Pantalla Completa</span>
               </button>
               <button id="btn-finish-game" class="px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase hover:bg-emerald-500 shadow cursor-pointer">Terminar Juego 🏆</button>
-              <button id="btn-open-instructor-modal" class="px-3 py-1.5 rounded-xl bg-amber-500/25 text-amber-300 border border-amber-400/60 font-black text-xs uppercase hover:bg-amber-500/40 cursor-pointer flex items-center gap-1">📱 Mando Móvil</button>
-              <button id="btn-view-qrcodes" class="px-3 py-1.5 rounded-xl bg-amber-500 text-black font-black text-xs uppercase hover:bg-amber-400 cursor-pointer">Ver QR</button>
+              <button id="btn-open-instructor-modal" class="px-3 py-1.5 rounded-xl border font-black text-xs uppercase cursor-pointer flex items-center gap-1 shadow transition" style="background-color: ${theme.cardInner}; border-color: ${theme.accentBorder}; color: ${theme.accent};">📱 Mando Móvil</button>
+              <button id="btn-view-qrcodes" class="px-3 py-1.5 rounded-xl font-black text-xs uppercase cursor-pointer shadow-md transition transform active:scale-95" style="background: linear-gradient(to right, ${theme.clueFrom}, ${theme.accent}); color: ${theme.headerBg};">Ver QR</button>
               <button id="btn-game-setup" class="px-3 py-1.5 rounded-xl bg-blue-900 text-blue-200 font-bold text-xs uppercase border border-blue-700 hover:bg-blue-800 cursor-pointer">Configuración</button>
               <button id="btn-game-reset" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-200 font-bold text-xs uppercase border border-slate-600 hover:bg-slate-700 cursor-pointer">Reiniciar</button>
               <button id="btn-game-logout" class="px-3 py-1.5 rounded-xl bg-rose-600 text-white font-black text-xs uppercase hover:bg-rose-500 cursor-pointer">Cerrar Sesión</button>
@@ -1924,16 +2648,17 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
             <div class="tv-studio-frame rounded-2xl p-4 grid gap-3 flex-1" style="grid-template-columns: repeat(${state.categories.length}, minmax(0, 1fr));">
               ${state.categories.map((cat: any) => `
                 <div class="flex flex-col gap-3">
-                  <div class="h-16 bg-gradient-to-b from-[#0e16fa] to-[#0408a8] border-2 border-[#FFCC00] rounded-xl flex items-center justify-center p-2 text-center shadow">
-                    <span class="font-cinzel text-sm sm:text-base font-black text-[#FFCC00] uppercase">${escapeHtml(cat.title)}</span>
+                  <div class="h-16 rounded-xl flex items-center justify-center p-2 text-center shadow border-2" style="background: linear-gradient(to bottom, ${theme.clueFrom}, ${theme.clueTo}); border-color: ${theme.accent};">
+                    <span class="font-cinzel text-sm sm:text-base font-black uppercase" style="color: ${theme.accent};">${escapeHtml(cat.title)}</span>
                   </div>
                   ${cat.clues.map((clue: any) => `
                     <button
                       data-cat="${cat.id}" data-clue="${clue.id}"
                       ${clue.isAnswered ? 'disabled' : ''}
                       class="clue-btn flex-1 min-h-[65px] rounded-xl border-2 sm:border-3 font-bebas text-3xl transition-all ${
-                        clue.isAnswered ? 'answered-card pointer-events-none cursor-not-allowed' : 'glossy-clue-card bg-gradient-to-b from-[#0e17fa] to-[#03068e] border-[#FFCC00] text-[#FFCC00] cursor-pointer'
+                        clue.isAnswered ? 'answered-card pointer-events-none cursor-not-allowed' : 'glossy-clue-card cursor-pointer shadow-md transform hover:scale-[1.02]'
                       }"
+                      style="${clue.isAnswered ? '' : `background: linear-gradient(to bottom, ${theme.clueFrom}, ${theme.clueTo}); border-color: ${theme.accent}; color: ${theme.accent};`}"
                     >
                       ${clue.isAnswered ? '' : `$${clue.value}`}
                     </button>
@@ -1945,29 +2670,29 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
           <!-- MODAL DE PREGUNTA / PANTALLA INTERMEDIA -->
           ${state.activeClue ? `
-            <div class="fixed inset-0 bg-[#000533]/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 animate-clue-zoom">
-              <div class="max-w-4xl w-full bg-[#000842] border-4 border-[#FFCC00] rounded-3xl p-8 shadow-[0_0_80px_rgba(255,204,0,0.4)] flex flex-col items-center text-center relative space-y-6 min-h-[460px] justify-between">
+            <div class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 animate-clue-zoom">
+              <div class="max-w-4xl w-full border-4 rounded-3xl p-8 flex flex-col items-center text-center relative space-y-6 min-h-[460px] justify-between shadow-2xl" style="background-color: ${theme.cardBg}; border-color: ${theme.accent}; box-shadow: 0 0 80px ${theme.accent}44;">
                 
-                <div class="flex justify-between items-center w-full border-b border-blue-900/80 pb-4">
-                  <span class="font-cinzel text-lg font-black text-[#FFCC00] uppercase">${escapeHtml(state.activeClue.categoryTitle)}</span>
-                  <span class="font-bebas text-4xl text-[#FFCC00]">$${state.activeClue.value}</span>
+                <div class="flex justify-between items-center w-full border-b pb-4" style="border-color: ${theme.subBorder};">
+                  <span class="font-cinzel text-lg font-black uppercase" style="color: ${theme.accent};">${escapeHtml(state.activeClue.categoryTitle)}</span>
+                  <span class="font-bebas text-4xl" style="color: ${theme.accent};">$${state.activeClue.value}</span>
                 </div>
 
                 <!-- PANTALLA 1: CARGANDO DISPOSITIVOS -->
                 ${state.loadingDevicesState ? `
                   <div class="my-auto flex flex-col items-center justify-center space-y-6">
-                    <div class="w-16 h-16 border-4 border-[#FFCC00] border-t-transparent rounded-full animate-spin"></div>
-                    <div class="text-3xl sm:text-5xl font-black text-white font-cinzel tracking-wider uppercase animate-pulse text-[#FFCC00]">
+                    <div class="w-16 h-16 border-4 border-t-transparent rounded-full animate-spin" style="border-color: ${theme.accent}; border-top-color: transparent;"></div>
+                    <div class="text-3xl sm:text-5xl font-black font-cinzel tracking-wider uppercase animate-pulse" style="color: ${theme.accent};">
                       Cargando dispositivos...
                     </div>
-                    <div class="bg-amber-500/20 border-2 border-amber-400 text-amber-300 px-6 py-4 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-wide text-center leading-relaxed shadow-lg max-w-xl">
+                    <div class="p-4 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-wide text-center leading-relaxed shadow-lg max-w-xl border-2" style="background-color: ${theme.cardInner}; border-color: ${theme.accentBorder}; color: ${theme.accent};">
                       ⚠️ LOS PULSADORES ESTÁN ACTIVOS EN LOS DISPOSITIVOS.<br>NO OPRIMIR HASTA QUE SE DESPLIEGUE LA PREGUNTA.
                     </div>
                     <p class="text-xs text-blue-300 italic">Verifica que los equipos estén listos y presiona el botón inferior para desplegar la pregunta.</p>
                   </div>
 
                   <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
-                    <button id="btn-deploy-question" class="px-8 py-4 bg-[#FFCC00] hover:bg-yellow-400 text-[#000533] rounded-2xl font-black text-base uppercase shadow-xl cursor-pointer">
+                    <button id="btn-deploy-question" class="px-8 py-4 rounded-2xl font-black text-base uppercase shadow-xl cursor-pointer transition transform active:scale-95" style="background: linear-gradient(to right, ${theme.clueFrom}, ${theme.accent}); color: ${theme.headerBg};">
                       Desplegar Pregunta 🚀
                     </button>
                     <button id="btn-cancel-clue" class="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase cursor-pointer">
@@ -1983,11 +2708,11 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
                     <!-- DESPLIEGUE DE LA RESPUESTA CORRECTA EN PANTALLA PRINCIPAL -->
                     ${state.activeClue.showAnswer ? `
-                      <div class="w-full max-w-2xl mx-auto bg-gradient-to-r from-amber-500/25 via-yellow-400/30 to-amber-500/25 border-3 border-[#FFCC00] rounded-2xl p-5 shadow-[0_0_60px_rgba(255,204,0,0.6)] animate-clue-zoom text-center space-y-2 mt-4">
-                        <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#FFCC00] text-[#000533] font-cinzel font-black text-xs uppercase tracking-widest shadow">
+                      <div class="w-full max-w-2xl mx-auto border-3 rounded-2xl p-5 shadow-2xl animate-clue-zoom text-center space-y-2 mt-4" style="background-color: ${theme.cardInner}; border-color: ${theme.accent}; box-shadow: 0 0 60px ${theme.accent}66;">
+                        <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full font-cinzel font-black text-xs uppercase tracking-widest shadow" style="background-color: ${theme.accent}; color: ${theme.headerBg};">
                           <span>💡</span> RESPUESTA CORRECTA
                         </div>
-                        <div class="text-2xl sm:text-4xl md:text-5xl font-black text-amber-300 font-cinzel tracking-wide drop-shadow-lg">
+                        <div class="text-2xl sm:text-4xl md:text-5xl font-black font-cinzel tracking-wide drop-shadow-lg" style="color: ${theme.accent};">
                           ${escapeHtml(state.activeClue.answer || 'Sin respuesta registrada')}
                         </div>
                       </div>
@@ -2151,19 +2876,35 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
     // 4. PANTALLA DE PODIUM
     function renderPodiumTeamsScreen(appContainer: HTMLElement) {
+      const theme = getTheme();
+      const branding = state.branding || { companyName: '', logo: '', palette: 'azul' };
       const activeTeams = [...state.teams.slice(0, state.teamCount)].sort((a: any, b: any) => b.score - a.score);
       const winner = activeTeams[0] || { name: 'Sin ganador', color: '#FFCC00', score: 0 };
       if (typeof window.confetti === 'function') window.confetti({ particleCount: 120, spread: 90, origin: { y: 0.5 } });
 
       appContainer.innerHTML = `
-        <div class="min-h-screen bg-[#000533] p-6 flex flex-col justify-between items-center text-center">
-          <header class="w-full max-w-4xl flex flex-wrap justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4 gap-3 shadow-lg">
+        <div class="min-h-screen p-6 flex flex-col justify-between items-center text-center transition-colors duration-300" style="background-color: ${theme.bodyBg};">
+          <header class="w-full max-w-4xl flex flex-wrap justify-between items-center rounded-2xl p-4 gap-3 shadow-lg border-2 transition-colors duration-300" style="background-color: ${theme.headerBg}; border-color: ${theme.accentBorder};">
             <div class="flex items-center gap-3">
               <button id="btn-back-podium-header" title="Volver a la pantalla anterior" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 border-2 border-blue-400 text-white font-black text-xs uppercase flex items-center gap-2 transition cursor-pointer shadow-md transform active:scale-95">
                 <span class="text-base">⬅</span>
                 <span>Volver / Regresar</span>
               </button>
-              <h1 class="text-lg sm:text-xl font-black text-[#FFCC00] uppercase font-cinzel leading-tight">🏆 PODIUM DE EQUIPOS GANADORES 🏆</h1>
+
+              ${branding.logo ? `
+                <div class="h-10 px-2 py-0.5 rounded-xl bg-white/10 backdrop-blur-sm border flex items-center justify-center shadow shrink-0" style="border-color: ${theme.accent};">
+                  <img src="${branding.logo}" alt="Logotipo" class="h-7 max-w-[85px] object-contain drop-shadow" />
+                </div>
+              ` : ''}
+
+              <div class="text-left">
+                ${branding.companyName ? `
+                  <div class="text-[10px] font-black uppercase tracking-wider font-cinzel leading-none mb-1" style="color: ${theme.accent}">
+                    🏢 ${escapeHtml(branding.companyName)}
+                  </div>
+                ` : ''}
+                <h1 class="text-lg sm:text-xl font-black uppercase font-cinzel leading-tight" style="color: ${theme.accent};">🏆 PODIUM DE EQUIPOS GANADORES 🏆</h1>
+              </div>
             </div>
             <button id="btn-logout-podium-teams" class="px-3.5 py-2 bg-rose-600/90 rounded-xl text-xs font-bold uppercase text-white hover:bg-rose-500 transition cursor-pointer shadow">Cerrar Sesión</button>
           </header>
@@ -2206,26 +2947,39 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
     // 5. VISTA MÓVIL DEL PARTICIPANTE
     function renderPlayerView(appContainer: HTMLElement) {
+      const theme = getTheme();
+      const branding = state.branding || { companyName: '', logo: '', palette: 'azul' };
       const myTeamId = assignedTeamId || localStorage.getItem('jeopardy_player_team') || 'azul';
       const myName = localStorage.getItem('jeopardy_player_name') || '';
       const myId = localStorage.getItem('jeopardy_player_id') || '';
 
       if (!myName) {
         appContainer.innerHTML = `
-          <div class="min-h-screen bg-[#000533] p-4 flex items-center justify-center">
-            <div class="w-full max-w-sm bg-[#000842] border-4 border-[#FFCC00] rounded-3xl p-6 text-center space-y-4">
-              <div class="w-16 h-16 mx-auto rounded-2xl bg-[#060CE9] border-2 border-[#FFCC00] flex items-center justify-center font-cinzel text-3xl font-black text-[#FFCC00]">J!</div>
+          <div class="min-h-screen p-4 flex items-center justify-center transition-colors duration-300" style="background-color: ${theme.bodyBg};">
+            <div class="w-full max-w-sm border-4 rounded-3xl p-6 text-center space-y-4 shadow-2xl transition-colors duration-300" style="background-color: ${theme.cardBg}; border-color: ${theme.accent};">
+              ${branding.logo ? `
+                <div class="h-14 px-3 py-1 mx-auto rounded-xl bg-white/10 backdrop-blur-sm border inline-flex items-center justify-center shadow" style="border-color: ${theme.accent};">
+                  <img src="${branding.logo}" alt="Logotipo" class="max-h-full max-w-[150px] object-contain drop-shadow" />
+                </div>
+              ` : `
+                <div class="w-16 h-16 mx-auto rounded-2xl border-2 flex items-center justify-center font-cinzel text-3xl font-black shadow" style="background-color: ${theme.cardInner}; border-color: ${theme.accent}; color: ${theme.accent};">J!</div>
+              `}
+              ${branding.companyName ? `
+                <div class="text-[11px] font-black uppercase tracking-wider font-cinzel" style="color: ${theme.accent};">
+                  🏢 ${escapeHtml(branding.companyName)}
+                </div>
+              ` : ''}
               <h2 class="text-xl font-black text-white uppercase font-cinzel">Registro de Concursante</h2>
-              <div class="p-2.5 rounded-xl bg-blue-950 border border-blue-600">
+              <div class="p-2.5 rounded-xl border" style="background-color: ${theme.cardInner}; border-color: ${theme.subBorder};">
                 <span class="text-xs uppercase text-blue-300 font-bold">Equipo:</span>
-                <span class="text-base font-black text-[#FFCC00] uppercase block">${escapeHtml(myTeamId)}</span>
+                <span class="text-base font-black uppercase block" style="color: ${theme.accent};">${escapeHtml(myTeamId)}</span>
               </div>
               <form id="mobile-join-form" class="space-y-4 text-left">
                 <div>
                   <label class="block text-xs font-bold text-blue-200 mb-1">Tu Nombre:</label>
-                  <input id="mobile-name" type="text" required placeholder="Escribe tu nombre..." class="w-full p-3.5 rounded-xl bg-[#000324] border-2 border-blue-500 text-white font-bold" />
+                  <input id="mobile-name" type="text" required placeholder="Escribe tu nombre..." class="w-full p-3.5 rounded-xl border-2 text-white font-bold" style="background-color: ${theme.cardInner}; border-color: ${theme.subBorder};" />
                 </div>
-                <button type="submit" class="w-full py-3.5 bg-[#FFCC00] text-[#000533] font-black uppercase rounded-xl hover:bg-yellow-400 cursor-pointer">Entrar al Juego</button>
+                <button type="submit" class="w-full py-3.5 font-black uppercase rounded-xl cursor-pointer shadow-lg transition transform active:scale-95" style="background-color: ${theme.accent}; color: ${theme.headerBg};">Entrar al Juego</button>
               </form>
             </div>
           </div>
@@ -2354,19 +3108,32 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
     // 6. VISTA MÓVIL DE CONTROL PARA EL INSTRUCTOR (?role=instructor)
     function renderInstructorMobileView(appContainer: HTMLElement) {
+      const theme = getTheme();
+      const branding = state.branding || { companyName: '', logo: '', palette: 'azul' };
       const teamCount = state.teamCount || state.teams.length;
       const activeTeams = state.teams.slice(0, teamCount);
       const activeClue = state.activeClue;
 
       appContainer.innerHTML = `
-        <div class="min-h-screen bg-[#000533] text-white flex flex-col justify-between">
-          <!-- BARRA SUPERIOR DE ESTADO DEL INSTRUCTOR -->
-          <header class="bg-[#000222] border-b-2 border-amber-500 px-4 py-3 sticky top-0 z-40 shadow-lg">
+        <div class="min-h-screen text-white flex flex-col justify-between transition-colors duration-300" style="background-color: ${theme.bodyBg};">
+          <!-- BARRA SUPERIOR DE ESTADO DEL INSTRUCTOR CON BRANDING CORPORATIVO -->
+          <header class="border-b-2 px-4 py-3 sticky top-0 z-40 shadow-lg transition-colors duration-300" style="background-color: ${theme.headerBg}; border-color: ${theme.accentBorder};">
             <div class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2">
-                <span class="w-8 h-8 rounded-lg bg-amber-500 text-[#000533] flex items-center justify-center font-cinzel font-black text-sm">📱</span>
-                <div>
-                  <h1 class="text-xs sm:text-sm font-black text-[#FFCC00] uppercase font-cinzel leading-none truncate max-w-[200px] sm:max-w-none">
+              <div class="flex items-center gap-2.5">
+                ${branding.logo ? `
+                  <div class="h-10 px-2 py-0.5 rounded-xl bg-white/10 backdrop-blur-sm border flex items-center justify-center shadow shrink-0" style="border-color: ${theme.accent};">
+                    <img src="${branding.logo}" alt="Logotipo" class="h-7 max-w-[85px] object-contain drop-shadow" />
+                  </div>
+                ` : `
+                  <span class="w-8 h-8 rounded-lg flex items-center justify-center font-cinzel font-black text-sm shadow" style="background-color: ${theme.accent}; color: ${theme.headerBg};">📱</span>
+                `}
+                <div class="flex flex-col justify-center">
+                  ${branding.companyName ? `
+                    <div class="text-[10px] font-black uppercase tracking-wider font-cinzel truncate max-w-[170px] leading-tight drop-shadow" style="color: ${theme.accent}">
+                      🏢 ${escapeHtml(branding.companyName)}
+                    </div>
+                  ` : ''}
+                  <h1 class="text-xs sm:text-sm font-black text-white uppercase font-cinzel leading-none truncate max-w-[200px] sm:max-w-none mt-0.5">
                     ${escapeHtml(state.title || 'Control Instructor')}
                   </h1>
                   <span class="text-[10px] text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
@@ -2402,17 +3169,17 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
           <main class="flex-1 p-4 max-w-2xl mx-auto w-full flex flex-col justify-start">
             ${activeClue ? `
               <!-- TARJETA DE PREGUNTA ACTIVA CON DETALLES SECRETOS PARA EL INSTRUCTOR -->
-              <div class="bg-[#000842] border-3 border-[#FFCC00] rounded-2xl p-4 sm:p-5 shadow-[0_0_40px_rgba(255,204,0,0.25)] space-y-4">
+              <div class="rounded-2xl p-4 sm:p-5 space-y-4 border-3 shadow-xl" style="background-color: ${theme.cardBg}; border-color: ${theme.accent}; box-shadow: 0 0 40px ${theme.accent}33;">
                 
                 <!-- Encabezado de la Clue: Categoría y Puntos -->
-                <div class="flex justify-between items-center border-b border-blue-900/80 pb-3">
+                <div class="flex justify-between items-center border-b pb-3" style="border-color: ${theme.subBorder};">
                   <div>
-                    <span class="text-[10px] text-amber-400 uppercase font-black tracking-widest block">Categoría</span>
+                    <span class="text-[10px] uppercase font-black tracking-widest block" style="color: ${theme.accent};">Categoría</span>
                     <h2 class="font-cinzel text-base sm:text-lg font-black text-white uppercase">${escapeHtml(activeClue.categoryTitle || '')}</h2>
                   </div>
                   <div class="text-right">
                     <span class="text-[10px] text-blue-300 uppercase font-bold block">Valor</span>
-                    <span class="font-bebas text-3xl sm:text-4xl text-[#FFCC00]">$${activeClue.value}</span>
+                    <span class="font-bebas text-3xl sm:text-4xl" style="color: ${theme.accent};">$${activeClue.value}</span>
                   </div>
                 </div>
 
@@ -2433,17 +3200,17 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                 <!-- PREGUNTA ACTUAL -->
                 <div class="space-y-1">
                   <span class="text-[11px] font-black uppercase text-blue-300 tracking-wider font-cinzel">Pregunta Actual:</span>
-                  <div class="p-3.5 bg-[#000324] rounded-xl border border-blue-700 text-white font-bold text-base sm:text-lg leading-snug">
+                  <div class="p-3.5 rounded-xl border text-white font-bold text-base sm:text-lg leading-snug" style="background-color: ${theme.cardInner}; border-color: ${theme.subBorder};">
                     "${escapeHtml(activeClue.question)}"
                   </div>
                 </div>
 
                 <!-- RESPUESTA CORRECTA: EXCLUSIVA DEL INSTRUCTOR CON BOTÓN DE DESPLIEGUE EN VIVO -->
-                <div class="space-y-3 p-4 bg-gradient-to-b from-[#00103a] to-[#000824] rounded-2xl border-2 border-amber-400 shadow-lg">
+                <div class="space-y-3 p-4 rounded-2xl border-2 shadow-lg" style="background: linear-gradient(to bottom, ${theme.cardInner}, ${theme.cardBg}); border-color: ${theme.accent};">
                   <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-black uppercase text-amber-400 tracking-wider font-cinzel flex items-center gap-1.5">
+                    <span class="text-[11px] font-black uppercase tracking-wider font-cinzel flex items-center gap-1.5" style="color: ${theme.accent};">
                       <span>👁️ RESPUESTA CORRECTA</span>
-                      <span class="bg-amber-500 text-[#000533] text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Mando Móvil</span>
+                      <span class="text-[9px] font-black px-1.5 py-0.5 rounded uppercase" style="background-color: ${theme.accent}; color: ${theme.headerBg};">Mando Móvil</span>
                     </span>
                     <span class="text-[10px] ${activeClue.showAnswer ? 'text-emerald-400 font-black' : 'text-slate-400 italic'}">
                       ${activeClue.showAnswer ? '● VISIBLE EN PANTALLA' : '○ Oculta en pantalla'}
@@ -2451,8 +3218,8 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                   </div>
 
                   <!-- Tarjeta con la respuesta -->
-                  <div class="p-3.5 bg-[#000524] rounded-xl border border-amber-500/60 text-amber-300 font-black text-lg sm:text-xl flex items-center gap-2.5 shadow-inner">
-                    <span class="text-amber-400 text-xl">💡</span>
+                  <div class="p-3.5 rounded-xl border font-black text-lg sm:text-xl flex items-center gap-2.5 shadow-inner" style="background-color: ${theme.cardInner}; border-color: ${theme.accent}88; color: ${theme.accent};">
+                    <span class="text-xl">💡</span>
                     <span class="font-sans flex-1">${escapeHtml(activeClue.answer || 'Sin respuesta registrada')}</span>
                   </div>
 
@@ -2466,10 +3233,10 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                   <!-- Botón interactivo y visible para desplegar la respuesta desde el móvil -->
                   <button
                     id="instructor-btn-toggle-answer"
-                    class="w-full py-4 px-4 rounded-xl font-black text-sm uppercase shadow-xl flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-95 ${
-                      activeClue.showAnswer
-                        ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-2 border-amber-400/70'
-                        : 'bg-gradient-to-r from-amber-400 via-[#FFCC00] to-yellow-400 hover:brightness-110 text-[#000533] border-2 border-yellow-200 shadow-[0_0_20px_rgba(255,204,0,0.3)]'
+                    class="w-full py-4 px-4 rounded-xl font-black text-sm uppercase shadow-xl flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-95"
+                    style="${activeClue.showAnswer
+                      ? `background-color: ${theme.cardInner}; border: 2px solid ${theme.accentBorder}; color: ${theme.accent};`
+                      : `background: linear-gradient(to right, ${theme.clueFrom}, ${theme.accent}); color: ${theme.headerBg}; border: 2px solid ${theme.accentBorder}; box-shadow: 0 0 25px ${theme.accent}55;`
                     }"
                   >
                     <span class="text-xl">${activeClue.showAnswer ? '🙈' : '📢'}</span>
@@ -2528,13 +3295,13 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
 
                 <!-- BOTONES DE ACCIÓN EN TIEMPO REAL -->
                 <div class="space-y-2 pt-2">
-                  <span class="text-[11px] font-black uppercase text-[#FFCC00] tracking-wider font-cinzel block">
+                  <span class="text-[11px] font-black uppercase tracking-wider font-cinzel block" style="color: ${theme.accent};">
                     Acciones de Control en Tiempo Real:
                   </span>
 
                   <!-- Botón 1: Desplegar Pregunta -->
                   ${state.loadingDevicesState ? `
-                    <button id="instructor-btn-deploy" class="w-full py-4 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-[#000533] rounded-xl font-black text-sm uppercase shadow-lg flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98">
+                    <button id="instructor-btn-deploy" class="w-full py-4 rounded-xl font-black text-sm uppercase shadow-lg flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98" style="background: linear-gradient(to right, ${theme.clueFrom}, ${theme.accent}); color: ${theme.headerBg};">
                       <span class="text-lg">🚀</span> Desplegar Pregunta
                     </button>
                   ` : ''}
@@ -2551,12 +3318,12 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                     </div>
 
                     <!-- CONTROL DE FALSA SALIDA / REINICIO DE TIMBRES -->
-                    <div class="p-3.5 rounded-2xl bg-gradient-to-r from-amber-950/70 via-orange-950/60 to-amber-950/70 border-2 border-amber-400 space-y-2.5 shadow-lg">
+                    <div class="p-3.5 rounded-2xl border-2 space-y-2.5 shadow-lg" style="background: linear-gradient(to right, ${theme.cardBg}, ${theme.cardInner}); border-color: ${theme.accentBorder};">
                       <div class="flex items-center justify-between">
-                        <span class="text-xs font-black uppercase text-amber-300 flex items-center gap-1.5 font-cinzel">
+                        <span class="text-xs font-black uppercase flex items-center gap-1.5 font-cinzel" style="color: ${theme.accent};">
                           <span>⚡</span> Falsa Salida / Intento Anticipado
                         </span>
-                        <span class="text-[9px] bg-amber-400 text-[#000533] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">Control Buzzer</span>
+                        <span class="text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider" style="background-color: ${theme.accent}; color: ${theme.headerBg};">Control Buzzer</span>
                       </div>
                       <p class="text-xs text-amber-100/90 leading-tight">
                         ¿<strong>${escapeHtml(state.currentTurn.playerName)}</strong> (${escapeHtml(state.currentTurn.teamName)}) oprimió antes de tiempo? Invalida este timbre sin quitarle puntos:
@@ -2564,7 +3331,8 @@ Deportes,500,Número reglamentario de jugadores por equipo en cancha en básquet
                       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                         <button
                           id="instructor-btn-reset-buzzers-all"
-                          class="py-3 px-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-[#000533] font-black text-xs uppercase rounded-xl shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition"
+                          class="py-3 px-2 font-black text-xs uppercase rounded-xl shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition"
+                          style="background: linear-gradient(to right, ${theme.clueFrom}, ${theme.accent}); color: ${theme.headerBg};"
                         >
                           <span>⚡</span> Reiniciar Timbres (Permitir a Todos)
                         </button>
